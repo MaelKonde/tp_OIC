@@ -83,7 +83,6 @@ img = Image.open(uploaded)
 st.image(img, use_column_width=True)
 
 lat_current, lon_current = get_location_ipapi()
-
 exif = get_exif_data(img)
 gps = exif.get("GPSInfo")
 lat_img = lon_img = None
@@ -91,14 +90,14 @@ if gps:
     try:
         lat_img = dms_rational_to_deg(gps[2], gps[1].decode() if isinstance(gps[1],bytes) else gps[1])
         lon_img = dms_rational_to_deg(gps[4], gps[3].decode() if isinstance(gps[3],bytes) else gps[3])
-    except: pass
+    except:
+        pass
 
 st.subheader("✏️ Métadonnées EXIF Principales")
 if lat_img is not None and lon_img is not None:
-    st.success(f"Coordonnées GPS de l'image : {lat_img:.6f}, {lon_img:.6f}")
+    st.write(f"{lat_img:.6f}, {lon_img:.6f}")
 else:
-    st.warning("Pas de coordonnées GPS sur l'image.")
-    st.info("Saisir les coordonnées GPS ci-dessous.")
+    st.write("⚠️ Pas de coordonnées GPS enregistrées dans l’image. Veuillez les saisir manuellement ci-dessous.")
 
 # --------- Formulaire édition EXIF ---------
 if uploaded.type in ["image/jpeg", "image/jpg"]:
@@ -115,22 +114,18 @@ if uploaded.type in ["image/jpeg", "image/jpg"]:
         exif_dict["0th"][piexif.ImageIFD.Copyright] = copyright.encode('utf-8')
         exif_dict["0th"][piexif.ImageIFD.ImageDescription] = description.encode('utf-8')
         buffer = save_image_with_exif(img, exif_dict)
-        st.session_state.modified_exif_image = buffer
         st.success("✅ Métadonnées EXIF modifiées.")
-
-    if 'modified_exif_image' in st.session_state:
         st.download_button(
             label="📥 Télécharger l'image modifiée (JPEG)",
-            data=st.session_state.modified_exif_image,
+            data=buffer,
             file_name="photo_modifiee.jpg",
             mime="image/jpeg"
         )
 else:
     st.info("ℹ️ L'édition des métadonnées EXIF est uniquement disponible pour les images JPEG.")
 
-# --------- Saisie / Modification des coordonnées GPS ---------
+# 📍 Saisie GPS
 st.subheader("📍 Saisie/Modification des coordonnées GPS")
-
 lat_def = lat_img if lat_img is not None else lat_current
 lon_def = lon_img if lon_img is not None else lon_current
 
@@ -144,10 +139,10 @@ st.session_state.lon = st.number_input("Longitude", value=float(st.session_state
 if abs(st.session_state.lat - lat_current) < 0.001 and abs(st.session_state.lon - lon_current) < 0.001:
     st.success("✅ Coordonnées correspondent à ta position actuelle.")
 else:
-    st.info("Tu peux saisir n'importe quelles coordonnées GPS.")
+    st.error("❌ Coordonnées ne correspondent pas à ta position actuelle.")
 
 if st.button("Mettre à jour les coordonnées GPS"):
-    exif_dict = piexif.load(img.info["exif"]) if "exif" in img.info else {"0th":{}, "Exif":{}, "GPS":{}, "1st":{}, "thumbnail":None}
+    exif_dict = piexif.load(img.info["exif"]) if "exif" in img.info else {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}, "thumbnail": None}
     gps_ifd = {
         piexif.GPSIFD.GPSLatitudeRef: b"N" if st.session_state.lat >= 0 else b"S",
         piexif.GPSIFD.GPSLatitude: deg_to_dms_rational(abs(st.session_state.lat)),
@@ -155,23 +150,30 @@ if st.button("Mettre à jour les coordonnées GPS"):
         piexif.GPSIFD.GPSLongitude: deg_to_dms_rational(abs(st.session_state.lon)),
     }
     exif_dict["GPS"] = gps_ifd
-    buf = save_image_with_exif(img, exif_dict)
-    st.session_state.modified_image_gps = buf
+    buffer = save_image_with_exif(img, exif_dict)
+    st.session_state.modified_image = buffer
     st.session_state.show_lat = st.session_state.lat
     st.session_state.show_lon = st.session_state.lon
-    st.success("✅ Image modifiée avec nouvelles coordonnées GPS.")
+    st.success("✅ Image modifiée avec nouvelles coordonnées GPS")
 
-if 'modified_image_gps' in st.session_state:
-    st.download_button("📥 Télécharger image avec GPS", data=st.session_state.modified_image_gps, file_name="img_gps.jpg", mime="image/jpeg")
+# Affiche le bouton de téléchargement GPS une fois l’image modifiée en session
+if st.session_state.get("modified_image", None):
+    st.download_button(
+        label="📥 Télécharger image GPS",
+        data=st.session_state.modified_image,
+        file_name="img_gps.jpg",
+        mime="image/jpeg"
+    )
 
-if st.session_state.show_lat is not None and st.session_state.show_lon is not None:
+# Carte GPS si disponible
+if st.session_state.get("show_lat") is not None and st.session_state.get("show_lon") is not None:
     zoom = auto_zoom(st.session_state.show_lat)
     m = folium.Map(location=[st.session_state.show_lat, st.session_state.show_lon], zoom_start=zoom)
     folium.Marker([st.session_state.show_lat, st.session_state.show_lon], popup="Position GPS").add_to(m)
     st.subheader("🗺️ Carte de la position GPS")
     st_folium(m, width=700)
 
-# --------- Section POI ---------
+# Section POI
 st.header("4. POI : voyages ou destinations de rêve")
 default_poi = [
     {"nom": "Paris", "latitude": 48.8566, "longitude": 2.3522},
