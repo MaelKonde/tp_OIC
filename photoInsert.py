@@ -83,7 +83,7 @@ img = Image.open(uploaded)
 st.image(img, use_column_width=True)
 
 lat_current, lon_current = get_location_ipapi()
-st.info(f"📍 Position actuelle estimée : {lat_current:.6f}, {lon_current:.6f}")
+#st.info(f"📍 Position actuelle estimée : {lat_current:.6f}, {lon_current:.6f}")
 
 exif = get_exif_data(img)
 gps = exif.get("GPSInfo")
@@ -94,11 +94,11 @@ if gps:
         lon_img = dms_rational_to_deg(gps[4], gps[3].decode() if isinstance(gps[3],bytes) else gps[3])
     except: pass
 
-st.subheader("📍 Coordonnées GPS dans l’image")
+st.subheader("✏️ Métadonnées EXIF Principales")
 if lat_img and lon_img:
     st.write(f"{lat_img:.6f}, {lon_img:.6f}")
 else:
-    st.write("Aucune coordonnée GPS trouvée.")
+    st.write("Aucune Métadonnées EXIF trouvées.")
 
 # --------- Formulaire édition EXIF ---------
 if uploaded.type in ["image/jpeg", "image/jpg"]:
@@ -128,7 +128,7 @@ else:
 
 
 # Saisie
-st.subheader("✏️ Saisie/Modification des coordonnées")
+st.subheader("📍 Saisie/Modification des coordonnées GPS")
 lat_def = lat_img if lat_img else lat_current
 lon_def = lon_img if lon_img else lon_current
 
