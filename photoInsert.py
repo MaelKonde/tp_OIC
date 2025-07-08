@@ -177,3 +177,31 @@ if uploaded_file:
 
 else:
     st.info("Chargez une photo JPEG pour commencer.")
+
+# --------- Affichage des POI (voyages/rêves) ---------
+    st.header("4. Carte de vos voyages ou destinations de rêve")
+    st.write("Saisissez les lieux (nom, latitude, longitude) à afficher sur la carte. Ajoutez au moins deux points pour voir une ligne.")
+
+    default_poi = [
+        {"nom": "Paris", "latitude": 48.8566, "longitude": 2.3522},
+        {"nom": "Kinshasa", "latitude": -4.4419, "longitude": 15.2663},
+        {"nom": "Luxembourg", "latitude": 49.6117, "longitude": 6.1319},
+        {"nom": "Bruxelles", "latitude": 50.8503, "longitude": 4.3517},
+        {"nom": "Karlsruhe", "latitude": 49.0069, "longitude": 8.4037},
+        {"nom": "Dortmund", "latitude": 51.5136, "longitude": 7.4653},
+    ]
+
+    poi_df = pd.DataFrame(default_poi)
+
+    poi_input = st.data_editor(poi_df, num_rows="dynamic", key="poi_editor")
+
+    if len(poi_input) >= 2:
+        m = folium.Map(location=[poi_input.iloc[0]["latitude"], poi_input.iloc[0]["longitude"]], zoom_start=2)
+        points = []
+        for idx, row in poi_input.iterrows():
+            folium.Marker([row["latitude"], row["longitude"]], popup=row["nom"]).add_to(m)
+            points.append((row["latitude"], row["longitude"]))
+        folium.PolyLine(points, color="blue", weight=2.5, opacity=1).add_to(m)
+        st_folium(m, width=700)
+    else:
+        st.info("Ajoutez au moins deux destinations pour afficher la carte.")
