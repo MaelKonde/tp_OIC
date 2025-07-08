@@ -15,13 +15,11 @@ import pandas as pd
 import folium
 from streamlit_folium import st_folium
 import requests
+from io import BytesIO
 
 # --------- FONCTIONS UTILES ---------
 
 def get_exif_data(img):
-    """
-    Récupère les métadonnées EXIF de l'image sous forme de dictionnaire.
-    """
     exif_data = {}
     if "exif" in img.info:
         exif_dict = piexif.load(img.info["exif"])
@@ -35,9 +33,6 @@ def get_exif_data(img):
     return exif_data
 
 def deg_to_dms_rational(deg_float):
-    """
-    Convertit un float degré GPS en tuple DMS (degrés, minutes, secondes) pour EXIF.
-    """
     deg = int(deg_float)
     min_float = abs(deg_float - deg) * 60
     min = int(min_float)
@@ -45,9 +40,6 @@ def deg_to_dms_rational(deg_float):
     return ((deg, 1), (min, 1), (sec, 100))
 
 def dms_rational_to_deg(dms, ref):
-    """
-    Convertit un tuple DMS EXIF en float degré décimal.
-    """
     deg = dms[0][0] / dms[0][1]
     min = dms[1][0] / dms[1][1]
     sec = dms[2][0] / dms[2][1] / 100
@@ -57,9 +49,6 @@ def dms_rational_to_deg(dms, ref):
     return val
 
 def get_location_ipapi():
-    """
-    Récupère la position approximative de l'utilisateur via son IP (service ipapi).
-    """
     try:
         response = requests.get('https://ipapi.co/json/')
         if response.status_code == 200:
@@ -94,7 +83,6 @@ if uploaded_file:
         description = st.text_input("Description", value=exif_data.get("ImageDescription", b"").decode(errors="ignore") if exif_data.get("ImageDescription") else "")
         submitted = st.form_submit_button("Enregistrer les modifications")
 
-    # Appliquer les modifications EXIF
     if submitted:
         exif_dict = piexif.load(image.info["exif"]) if "exif" in image.info else piexif.load(piexif.dump({}))
         exif_dict["0th"][piexif.ImageIFD.Artist] = artist.encode('utf-8')
@@ -103,6 +91,17 @@ if uploaded_file:
         exif_bytes = piexif.dump(exif_dict)
         image.save("photo_modifiee.jpg", exif=exif_bytes)
         st.success("Métadonnées EXIF modifiées et image sauvegardée sous 'photo_modifiee.jpg'.")
+
+        # Ajout bouton téléchargement PNG
+        buffer = BytesIO()
+        image.save(buffer, format="PNG")
+        buffer.seek(0)
+        st.download_button(
+            label="📥 Télécharger l'image modifiée en PNG",
+            data=buffer,
+            file_name="photo_modifiee.png",
+            mime="image/png"
+        )
 
     # --------- 2. MODIFIER LES DONNÉES GPS ---------
     st.header("2. Modifier les coordonnées GPS de la photo")
@@ -130,9 +129,19 @@ if uploaded_file:
         image.save("photo_gps.jpg", exif=exif_bytes)
         st.success("Coordonnées GPS mises à jour et image sauvegardée sous 'photo_gps.jpg'.")
 
+        # Ajout bouton téléchargement PNG
+        buffer_gps = BytesIO()
+        image.save(buffer_gps, format="PNG")
+        buffer_gps.seek(0)
+        st.download_button(
+            label="📥 Télécharger l'image avec GPS en PNG",
+            data=buffer_gps,
+            file_name="photo_gps.png",
+            mime="image/png"
+        )
+
     # --------- 3. AFFICHER LES COORDONNÉES GPS SUR UNE CARTE ---------
     st.header("3. Afficher la position GPS de la photo sur une carte")
-    # On tente de lire les coordonnées GPS de l'image
     gps_info = exif_data.get("GPSInfo")
     if gps_info:
         try:
@@ -152,20 +161,20 @@ if uploaded_file:
     st.header("4. Carte de vos voyages ou destinations de rêve")
     st.write("Saisissez les lieux (nom, latitude, longitude) à afficher sur la carte. Ajoutez au moins deux points pour voir une ligne.")
 
-    # Exemple de POI par défaut
-    default_poi = [
+    ddefault_poi = [
         {"nom": "Paris", "latitude": 48.8566, "longitude": 2.3522},
-        {"nom": "Tokyo", "latitude": 35.6895, "longitude": 139.6917},
-        {"nom": "New York", "latitude": 40.7128, "longitude": -74.0060},
+        {"nom": "Kinshasa", "latitude": -4.4419, "longitude": 15.2663},
+        {"nom": "Luxembourg", "latitude": 49.6117, "longitude": 6.1319},
+        {"nom": "Bruxelles", "latitude": 50.8503, "longitude": 4.3517},
+        {"nom": "Karlsruhe", "latitude": 49.0069, "longitude": 8.4037},
+        {"nom": "Dortmund", "latitude": 51.5136, "longitude": 7.4653},
     ]
     poi_df = pd.DataFrame(default_poi)
 
     poi_input = st.experimental_data_editor(poi_df, num_rows="dynamic", key="poi_editor")
 
-    # Affichage sur carte interactive avec Folium
     if len(poi_input) >= 2:
         m = folium.Map(location=[poi_input.iloc[0]["latitude"], poi_input.iloc[0]["longitude"]], zoom_start=2)
-        # Ajout des marqueurs et de la ligne
         points = []
         for idx, row in poi_input.iterrows():
             folium.Marker([row["latitude"], row["longitude"]], popup=row["nom"]).add_to(m)
