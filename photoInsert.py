@@ -157,11 +157,12 @@ if uploaded_file:
     else:
         st.info("Aucune coordonnée GPS lue dans l'image. (Ajoutez-les ci-dessus si besoin)")
 
-    # --------- 4. AFFICHAGE DES POI (VOYAGES/RÊVES) ---------
+        # --------- 4. AFFICHAGE DES POI (VOYAGES/RÊVES) ---------
     st.header("4. Carte de vos voyages ou destinations de rêve")
     st.write("Saisissez les lieux (nom, latitude, longitude) à afficher sur la carte. Ajoutez au moins deux points pour voir une ligne.")
 
-    ddefault_poi = [
+    # POI mis à jour avec Paris, Kinshasa, Luxembourg, Bruxelles, Karlsruhe, Dortmund
+    default_poi = [
         {"nom": "Paris", "latitude": 48.8566, "longitude": 2.3522},
         {"nom": "Kinshasa", "latitude": -4.4419, "longitude": 15.2663},
         {"nom": "Luxembourg", "latitude": 49.6117, "longitude": 6.1319},
@@ -169,6 +170,7 @@ if uploaded_file:
         {"nom": "Karlsruhe", "latitude": 49.0069, "longitude": 8.4037},
         {"nom": "Dortmund", "latitude": 51.5136, "longitude": 7.4653},
     ]
+
     poi_df = pd.DataFrame(default_poi)
 
     poi_input = st.experimental_data_editor(poi_df, num_rows="dynamic", key="poi_editor")
@@ -183,6 +185,3 @@ if uploaded_file:
         st_folium(m, width=700)
     else:
         st.info("Ajoutez au moins deux destinations pour afficher la carte.")
-
-else:
-    st.info("Veuillez charger une image JPEG pour commencer.")
