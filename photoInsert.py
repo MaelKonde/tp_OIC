@@ -24,6 +24,8 @@ def get_exif_data(img):
     if "exif" in img.info:
         exif_dict = piexif.load(img.info["exif"])
         for ifd in exif_dict:
+            if not isinstance(exif_dict[ifd], dict):  # Ignorer "thumbnail"
+                continue
             for tag in exif_dict[ifd]:
                 try:
                     tag_name = piexif.TAGS[ifd][tag]["name"]
@@ -31,6 +33,7 @@ def get_exif_data(img):
                 except KeyError:
                     continue
     return exif_data
+
 
 def deg_to_dms_rational(deg_float):
     deg = int(deg_float)
