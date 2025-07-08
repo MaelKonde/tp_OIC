@@ -72,7 +72,7 @@ def auto_zoom(lat):
 # --------- APPLICATION ---------
 
 st.set_page_config(page_title="EXIF GPS & POI", layout="wide")
-st.title("📸 EXIF GPS + POI")
+st.title("📸 anipulation des métadonnées EXIF et cartographie")
 
 uploaded = st.file_uploader("Chargez une photo JPEG", type=["jpg","jpeg"])
 if not uploaded:
@@ -99,6 +99,36 @@ if lat_img and lon_img:
     st.write(f"{lat_img:.6f}, {lon_img:.6f}")
 else:
     st.write("Aucune coordonnée GPS trouvée.")
+
+ # Formulaire édition EXIF (uniquement pour JPEG)
+    if uploaded_file.type in ["image/jpeg", "image/jpg"]:
+        with st.form("edit_exif"):
+            st.write("Modifiez les métadonnées EXIF principales :")
+            artist = st.text_input("Artiste / Auteur", value=exif_data.get("Artist", b"").decode(errors="ignore") if exif_data.get("Artist") else "")
+            copyright = st.text_input("Copyright", value=exif_data.get("Copyright", b"").decode(errors="ignore") if exif_data.get("Copyright") else "")
+            description = st.text_input("Description", value=exif_data.get("ImageDescription", b"").decode(errors="ignore") if exif_data.get("ImageDescription") else "")
+            submitted = st.form_submit_button("Enregistrer les modifications")
+
+        if submitted:
+            exif_dict = piexif.load(image.info["exif"]) if "exif" in image.info else {"0th":{}, "Exif":{}, "GPS":{}, "1st":{}, "thumbnail": None}
+            exif_dict["0th"][piexif.ImageIFD.Artist] = artist.encode('utf-8')
+            exif_dict["0th"][piexif.ImageIFD.Copyright] = copyright.encode('utf-8')
+            exif_dict["0th"][piexif.ImageIFD.ImageDescription] = description.encode('utf-8')
+            exif_bytes = piexif.dump(exif_dict)
+            buffer = BytesIO()
+            image.save(buffer, format="JPEG", exif=exif_bytes)
+            buffer.seek(0)
+            st.success("Métadonnées EXIF modifiées.")
+
+            st.download_button(
+                label="📥 Télécharger l'image modifiée (JPEG)",
+                data=buffer,
+                file_name="photo_modifiee.jpg",
+                mime="image/jpeg"
+            )
+    else:
+        st.info("L'édition des métadonnées EXIF est uniquement disponible pour les images JPEG.")
+
 
 # Saisie
 st.subheader("✏️ Saisie/Modification des coordonnées")
