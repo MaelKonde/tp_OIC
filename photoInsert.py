@@ -95,7 +95,7 @@ if gps:
 
 st.subheader("✏️ Métadonnées EXIF Principales")
 if lat_img is not None and lon_img is not None:
-    st.write(f"Coordonnées GPS de l'image : {lat_img:.6f}, {lon_img:.6f}")
+    st.success(f"Coordonnées GPS de l'image : {lat_img:.6f}, {lon_img:.6f}")
 else:
     st.warning("Pas de coordonnées GPS sur l'image.")
     st.info("Saisir les coordonnées GPS ci-dessous.")
@@ -130,38 +130,39 @@ else:
 
 # --------- Saisie / Modification des coordonnées GPS ---------
 st.subheader("📍 Saisie/Modification des coordonnées GPS")
+
 lat_def = lat_img if lat_img is not None else lat_current
 lon_def = lon_img if lon_img is not None else lon_current
 
-for key, default in [("lat",lat_def),("lon",lon_def),("show_lat",None),("show_lon",None)]:
+for key, default in [("lat", lat_def), ("lon", lon_def), ("show_lat", None), ("show_lon", None)]:
     if key not in st.session_state:
         st.session_state[key] = default
 
 st.session_state.lat = st.number_input("Latitude", value=float(st.session_state.lat), format="%.6f")
 st.session_state.lon = st.number_input("Longitude", value=float(st.session_state.lon), format="%.6f")
 
-if abs(st.session_state.lat-lat_current)<0.001 and abs(st.session_state.lon-lon_current)<0.001:
+if abs(st.session_state.lat - lat_current) < 0.001 and abs(st.session_state.lon - lon_current) < 0.001:
     st.success("✅ Coordonnées correspondent à ta position actuelle.")
 else:
-    st.error("❌ Coordonnées ne correspondent pas à ta position actuelle.")
+    st.info("Tu peux saisir n'importe quelles coordonnées GPS.")
 
 if st.button("Mettre à jour les coordonnées GPS"):
     exif_dict = piexif.load(img.info["exif"]) if "exif" in img.info else {"0th":{}, "Exif":{}, "GPS":{}, "1st":{}, "thumbnail":None}
     gps_ifd = {
-        piexif.GPSIFD.GPSLatitudeRef: b"N" if st.session_state.lat>=0 else b"S",
+        piexif.GPSIFD.GPSLatitudeRef: b"N" if st.session_state.lat >= 0 else b"S",
         piexif.GPSIFD.GPSLatitude: deg_to_dms_rational(abs(st.session_state.lat)),
-        piexif.GPSIFD.GPSLongitudeRef: b"E" if st.session_state.lon>=0 else b"W",
+        piexif.GPSIFD.GPSLongitudeRef: b"E" if st.session_state.lon >= 0 else b"W",
         piexif.GPSIFD.GPSLongitude: deg_to_dms_rational(abs(st.session_state.lon)),
     }
     exif_dict["GPS"] = gps_ifd
     buf = save_image_with_exif(img, exif_dict)
-    st.session_state.modified_image = buf
+    st.session_state.modified_image_gps = buf
     st.session_state.show_lat = st.session_state.lat
     st.session_state.show_lon = st.session_state.lon
-    st.success("✅ Image modifiée avec nouvelles coordonnées GPS")
+    st.success("✅ Image modifiée avec nouvelles coordonnées GPS.")
 
-if 'modified_image' in st.session_state:
-    st.download_button("📥 Télécharger image GPS", data=st.session_state.modified_image, file_name="img_gps.jpg", mime="image/jpeg")
+if 'modified_image_gps' in st.session_state:
+    st.download_button("📥 Télécharger image avec GPS", data=st.session_state.modified_image_gps, file_name="img_gps.jpg", mime="image/jpeg")
 
 if st.session_state.show_lat is not None and st.session_state.show_lon is not None:
     zoom = auto_zoom(st.session_state.show_lat)
@@ -183,16 +184,15 @@ default_poi = [
 
 poi_df = pd.DataFrame(default_poi)
 poi_input = st.data_editor(poi_df, num_rows="dynamic", key="poi_editor")
-if len(poi_input)>=2:
+if len(poi_input) >= 2:
     center = [poi_input.iloc[0]["latitude"], poi_input.iloc[0]["longitude"]]
     voyage_map = folium.Map(location=center, zoom_start=3)
-    pts=[]
+    pts = []
     for _, r in poi_input.iterrows():
         folium.Marker([r.latitude, r.longitude], popup=r.nom).add_to(voyage_map)
-        pts.append((r.latitude,r.longitude))
+        pts.append((r.latitude, r.longitude))
     folium.PolyLine(pts, color="blue").add_to(voyage_map)
     st.subheader("🗺️ Carte des POI")
     st_folium(voyage_map, width=700)
 else:
     st.info("Ajoute au moins deux lieux 😊")
-
