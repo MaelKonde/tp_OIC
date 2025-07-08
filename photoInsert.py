@@ -66,7 +66,6 @@ def save_image_with_exif(image, exif_dict):
     buffer.seek(0)
     return buffer
 
-# Zoom automatique simplifié par approximation (fonction basique)
 def auto_zoom(lat):
     if abs(lat) > 50:
         return 4
@@ -86,14 +85,12 @@ if uploaded_file:
     image = Image.open(uploaded_file)
     st.image(image, caption="Photo chargée", use_column_width=True)
 
-    # Coordonnées actuelles détectées via IPAPI
     lat_current, lon_current = get_location_ipapi()
     if lat_current and lon_current:
         st.info(f"Position actuelle détectée : Latitude {lat_current:.6f}, Longitude {lon_current:.6f}")
     else:
         st.warning("Impossible de détecter la position actuelle automatiquement.")
 
-    # Extraction coordonnées GPS existantes dans l'image
     exif_data = get_exif_data(image)
     gps_info = exif_data.get("GPSInfo", None)
 
@@ -115,20 +112,29 @@ if uploaded_file:
     else:
         st.write("Aucune coordonnée GPS trouvée dans l'image.")
 
-    # Saisie manuelle des coordonnées GPS
     st.subheader("Saisissez ou modifiez les coordonnées GPS")
 
-    # Valeurs initiales (priorité : image > position actuelle > 0.0)
     lat_default = lat_img if lat_img else (lat_current if lat_current else 0.0)
     lon_default = lon_img if lon_img else (lon_current if lon_current else 0.0)
 
-    latitude = st.number_input("Latitude", value=lat_default, format="%.6f")
-    longitude = st.number_input("Longitude", value=lon_default, format="%.6f")
+    # Utiliser session_state pour mémoriser saisie (si déjà initialisé)
+    if "latitude" not in st.session_state:
+        st.session_state.latitude = lat_default
+    if "longitude" not in st.session_state:
+        st.session_state.longitude = lon_default
+    if "show_lat" not in st.session_state:
+        st.session_state.show_lat = lat_default
+    if "show_lon" not in st.session_state:
+        st.session_state.show_lon = lon_default
 
-    # Validation correspondance avec position actuelle
+    # Inputs modifient session_state
+    st.session_state.latitude = st.number_input("Latitude", value=st.session_state.latitude, format="%.6f", key="lat_input")
+    st.session_state.longitude = st.number_input("Longitude", value=st.session_state.longitude, format="%.6f", key="lon_input")
+
+    # Message vert ou rouge selon correspondance
     if lat_current and lon_current:
-        diff_lat = abs(latitude - lat_current)
-        diff_lon = abs(longitude - lon_current)
+        diff_lat = abs(st.session_state.latitude - lat_current)
+        diff_lon = abs(st.session_state.longitude - lon_current)
         if diff_lat < 0.001 and diff_lon < 0.001:
             st.success("✔️ Les coordonnées correspondent à votre position actuelle.")
         else:
@@ -136,39 +142,38 @@ if uploaded_file:
     else:
         st.info("Position actuelle non disponible pour validation.")
 
-    # Bouton mise à jour des coordonnées GPS dans l'image
+    # Bouton pour enregistrer coordonnées et image modifiée
     if st.button("Mettre à jour les coordonnées GPS dans l'image"):
         exif_dict = piexif.load(image.info["exif"]) if "exif" in image.info else {"0th":{}, "Exif":{}, "GPS":{}, "1st":{}, "thumbnail": None}
         gps_ifd = {
-            piexif.GPSIFD.GPSLatitudeRef: b'N' if latitude >= 0 else b'S',
-            piexif.GPSIFD.GPSLatitude: deg_to_dms_rational(abs(latitude)),
-            piexif.GPSIFD.GPSLongitudeRef: b'E' if longitude >= 0 else b'W',
-            piexif.GPSIFD.GPSLongitude: deg_to_dms_rational(abs(longitude)),
+            piexif.GPSIFD.GPSLatitudeRef: b'N' if st.session_state.latitude >= 0 else b'S',
+            piexif.GPSIFD.GPSLatitude: deg_to_dms_rational(abs(st.session_state.latitude)),
+            piexif.GPSIFD.GPSLongitudeRef: b'E' if st.session_state.longitude >= 0 else b'W',
+            piexif.GPSIFD.GPSLongitude: deg_to_dms_rational(abs(st.session_state.longitude)),
         }
         exif_dict['GPS'] = gps_ifd
         buffer = save_image_with_exif(image, exif_dict)
+        st.session_state.modified_image = buffer  # Stocker l'image modifiée en session_state
+
+        # Mettre à jour la position à afficher sur la carte
+        st.session_state.show_lat = st.session_state.latitude
+        st.session_state.show_lon = st.session_state.longitude
+
         st.success("Coordonnées GPS mises à jour dans l'image.")
         st.download_button(
             label="📥 Télécharger l'image modifiée avec GPS",
-            data=buffer,
+            data=st.session_state.modified_image,
             file_name="photo_gps_modifiee.jpg",
             mime="image/jpeg"
         )
 
-        # Affichage carte zoomée sur la position saisie
-        zoom = auto_zoom(latitude)
-        m = folium.Map(location=[latitude, longitude], zoom_start=zoom)
-        folium.Marker([latitude, longitude], popup="Position GPS saisie").add_to(m)
-        st.subheader("Carte centrée sur les coordonnées saisies")
+    # Affichage carte tout le temps si coords valides
+    if st.session_state.show_lat is not None and st.session_state.show_lon is not None:
+        zoom = auto_zoom(st.session_state.show_lat)
+        m = folium.Map(location=[st.session_state.show_lat, st.session_state.show_lon], zoom_start=zoom)
+        folium.Marker([st.session_state.show_lat, st.session_state.show_lon], popup="Position GPS").add_to(m)
+        st.subheader("Carte centrée sur les coordonnées sélectionnées")
         st_folium(m, width=700)
-    else:
-        # Si pas encore mis à jour, afficher carte avec coordonnées initiales si possible
-        if lat_img and lon_img:
-            zoom = auto_zoom(lat_img)
-            m = folium.Map(location=[lat_img, lon_img], zoom_start=zoom)
-            folium.Marker([lat_img, lon_img], popup="Position GPS dans l'image").add_to(m)
-            st.subheader("Carte centrée sur les coordonnées actuelles dans l'image")
-            st_folium(m, width=700)
-        else:
-            st.info("Chargez ou saisissez des coordonnées GPS pour afficher la carte.")
 
+else:
+    st.info("Chargez une photo JPEG pour commencer.")
