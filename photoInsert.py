@@ -100,34 +100,31 @@ if lat_img and lon_img:
 else:
     st.write("Aucune coordonnée GPS trouvée.")
 
- # Formulaire édition EXIF (uniquement pour JPEG)
-    if uploaded.type in ["image/jpeg", "image/jpg"]:
-        with st.form("edit_exif"):
-            st.write("Modifiez les métadonnées EXIF principales :")
-            artist = st.text_input("Artiste / Auteur", value=exif_data.get("Artist", b"").decode(errors="ignore") if exif_data.get("Artist") else "")
-            copyright = st.text_input("Copyright", value=exif_data.get("Copyright", b"").decode(errors="ignore") if exif_data.get("Copyright") else "")
-            description = st.text_input("Description", value=exif_data.get("ImageDescription", b"").decode(errors="ignore") if exif_data.get("ImageDescription") else "")
-            submitted = st.form_submit_button("Enregistrer les modifications")
+# --------- Formulaire édition EXIF ---------
+if uploaded.type in ["image/jpeg", "image/jpg"]:
+    with st.form("edit_exif"):
+        st.write("✏️ Modifiez les métadonnées EXIF principales :")
+        artist = st.text_input("Artiste / Auteur", value=exif.get("Artist", b"").decode(errors="ignore") if exif.get("Artist") else "")
+        copyright = st.text_input("Copyright", value=exif.get("Copyright", b"").decode(errors="ignore") if exif.get("Copyright") else "")
+        description = st.text_input("Description", value=exif.get("ImageDescription", b"").decode(errors="ignore") if exif.get("ImageDescription") else "")
+        submitted = st.form_submit_button("Enregistrer les modifications")
 
-        if submitted:
-            exif_dict = piexif.load(image.info["exif"]) if "exif" in image.info else {"0th":{}, "Exif":{}, "GPS":{}, "1st":{}, "thumbnail": None}
-            exif_dict["0th"][piexif.ImageIFD.Artist] = artist.encode('utf-8')
-            exif_dict["0th"][piexif.ImageIFD.Copyright] = copyright.encode('utf-8')
-            exif_dict["0th"][piexif.ImageIFD.ImageDescription] = description.encode('utf-8')
-            exif_bytes = piexif.dump(exif_dict)
-            buffer = BytesIO()
-            image.save(buffer, format="JPEG", exif=exif_bytes)
-            buffer.seek(0)
-            st.success("Métadonnées EXIF modifiées.")
+    if submitted:
+        exif_dict = piexif.load(img.info["exif"]) if "exif" in img.info else {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}, "thumbnail": None}
+        exif_dict["0th"][piexif.ImageIFD.Artist] = artist.encode('utf-8')
+        exif_dict["0th"][piexif.ImageIFD.Copyright] = copyright.encode('utf-8')
+        exif_dict["0th"][piexif.ImageIFD.ImageDescription] = description.encode('utf-8')
+        buffer = save_image_with_exif(img, exif_dict)
+        st.success("✅ Métadonnées EXIF modifiées.")
+        st.download_button(
+            label="📥 Télécharger l'image modifiée (JPEG)",
+            data=buffer,
+            file_name="photo_modifiee.jpg",
+            mime="image/jpeg"
+        )
+else:
+    st.info("ℹ️ L'édition des métadonnées EXIF est uniquement disponible pour les images JPEG.")
 
-            st.download_button(
-                label="📥 Télécharger l'image modifiée (JPEG)",
-                data=buffer,
-                file_name="photo_modifiee.jpg",
-                mime="image/jpeg"
-            )
-    else:
-        st.info("L'édition des métadonnées EXIF est uniquement disponible pour les images JPEG.")
 
 
 # Saisie
