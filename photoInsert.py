@@ -11,6 +11,7 @@
 import streamlit as st
 from PIL import Image
 import piexif
+import pandas as pd
 import folium
 from streamlit_folium import st_folium
 import requests
