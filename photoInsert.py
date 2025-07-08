@@ -24,7 +24,7 @@ def get_exif_data(img):
     if "exif" in img.info:
         exif_dict = piexif.load(img.info["exif"])
         for ifd in exif_dict:
-            if not isinstance(exif_dict[ifd], dict):  # Ignorer "thumbnail"
+            if not isinstance(exif_dict[ifd], dict):
                 continue
             for tag in exif_dict[ifd]:
                 try:
@@ -33,7 +33,6 @@ def get_exif_data(img):
                 except KeyError:
                     continue
     return exif_data
-
 
 def deg_to_dms_rational(deg_float):
     deg = int(deg_float)
@@ -67,61 +66,65 @@ st.set_page_config(page_title="TP EXIF & Cartographie", layout="wide")
 st.title("Manipulation des métadonnées EXIF et cartographie")
 
 st.header("1. Charger une photo et éditer les métadonnées EXIF")
-uploaded_file = st.file_uploader("Chargez une photo (JPEG uniquement)", type=["jpg", "jpeg"])
+uploaded_file = st.file_uploader("Chargez une photo (JPEG ou PNG)", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
     image = Image.open(uploaded_file)
     st.image(image, caption="Aperçu de la photo", use_column_width=True)
 
-    # Extraction des métadonnées EXIF existantes
-    exif_data = get_exif_data(image)
-    st.subheader("Métadonnées EXIF détectées")
-    st.json(exif_data)
+    exif_data = {}
+    if image.format == "JPEG":
+        exif_data = get_exif_data(image)
+        st.subheader("Métadonnées EXIF détectées")
+        st.json(exif_data)
+    else:
+        st.warning("Image PNG chargée. Les métadonnées EXIF ne peuvent pas être lues ou modifiées.")
 
-    # Formulaire pour éditer les métadonnées EXIF principales
-    with st.form("edit_exif"):
-        st.write("Modifiez les métadonnées EXIF principales :")
-        artist = st.text_input("Artiste / Auteur", value=exif_data.get("Artist", b"").decode(errors="ignore") if exif_data.get("Artist") else "")
-        copyright = st.text_input("Copyright", value=exif_data.get("Copyright", b"").decode(errors="ignore") if exif_data.get("Copyright") else "")
-        description = st.text_input("Description", value=exif_data.get("ImageDescription", b"").decode(errors="ignore") if exif_data.get("ImageDescription") else "")
-        submitted = st.form_submit_button("Enregistrer les modifications")
+    # ----- MODIFICATION DES METADONNEES EXIF -----
+    if image.format == "JPEG":
+        with st.form("edit_exif"):
+            st.write("Modifiez les métadonnées EXIF principales :")
+            artist = st.text_input("Artiste / Auteur", value=exif_data.get("Artist", b"").decode(errors="ignore") if exif_data.get("Artist") else "")
+            copyright = st.text_input("Copyright", value=exif_data.get("Copyright", b"").decode(errors="ignore") if exif_data.get("Copyright") else "")
+            description = st.text_input("Description", value=exif_data.get("ImageDescription", b"").decode(errors="ignore") if exif_data.get("ImageDescription") else "")
+            submitted = st.form_submit_button("Enregistrer les modifications")
 
-    if submitted:
-        exif_dict = piexif.load(image.info["exif"]) if "exif" in image.info else piexif.load(piexif.dump({}))
-        exif_dict["0th"][piexif.ImageIFD.Artist] = artist.encode('utf-8')
-        exif_dict["0th"][piexif.ImageIFD.Copyright] = copyright.encode('utf-8')
-        exif_dict["0th"][piexif.ImageIFD.ImageDescription] = description.encode('utf-8')
-        exif_bytes = piexif.dump(exif_dict)
-        buffer = BytesIO()
-        image.save(buffer, format="JPEG", exif=exif_bytes)
-        buffer.seek(0)
-        st.success("Métadonnées EXIF modifiées.")
+        if submitted:
+            exif_dict = piexif.load(image.info["exif"]) if "exif" in image.info else piexif.load(piexif.dump({}))
+            exif_dict["0th"][piexif.ImageIFD.Artist] = artist.encode('utf-8')
+            exif_dict["0th"][piexif.ImageIFD.Copyright] = copyright.encode('utf-8')
+            exif_dict["0th"][piexif.ImageIFD.ImageDescription] = description.encode('utf-8')
+            exif_bytes = piexif.dump(exif_dict)
+            buffer = BytesIO()
+            image.save(buffer, format="JPEG", exif=exif_bytes)
+            buffer.seek(0)
+            st.success("Métadonnées EXIF modifiées.")
 
-        st.download_button(
-            label="📥 Télécharger l'image modifiée (JPEG)",
-            data=buffer,
-            file_name="photo_modifiee.jpg",
-            mime="image/jpeg"
-)
+            st.download_button(
+                label="📥 Télécharger l'image modifiée (JPEG)",
+                data=buffer,
+                file_name="photo_modifiee.jpg",
+                mime="image/jpeg"
+            )
 
-        # Ajout bouton téléchargement PNG
-        buffer = BytesIO()
-        image.save(buffer, format="PNG")
-        buffer.seek(0)
-        st.download_button(
-            label="📥 Télécharger l'image modifiée en PNG",
-            data=buffer,
-            file_name="photo_modifiee.png",
-            mime="image/png"
-        )
+    # Toujours proposer le téléchargement PNG (sans EXIF)
+    buffer_png = BytesIO()
+    image.save(buffer_png, format="PNG")
+    buffer_png.seek(0)
+    st.download_button(
+        label="📥 Télécharger une copie PNG de l'image",
+        data=buffer_png,
+        file_name="photo_modifiee.png",
+        mime="image/png"
+    )
 
-    # --------- 2. MODIFIER LES DONNÉES GPS ---------
+    # ----- MODIFICATION GPS -----
     st.header("2. Modifier les coordonnées GPS de la photo")
     lat, lon = get_location_ipapi()
     if lat and lon:
         st.info(f"Votre position actuelle détectée : Latitude {lat:.5f}, Longitude {lon:.5f}")
     else:
-        st.warning("Impossible de détecter automatiquement votre position. Saisissez-la manuellement.")
+        st.warning("Position non détectée automatiquement. Entrez-la manuellement.")
 
     with st.form("gps_form"):
         latitude = st.number_input("Latitude", value=lat if lat else 0.0, format="%.6f")
@@ -129,30 +132,31 @@ if uploaded_file:
         gps_submitted = st.form_submit_button("Mettre à jour les coordonnées GPS")
 
     if gps_submitted:
-        exif_dict = piexif.load(image.info["exif"]) if "exif" in image.info else piexif.load(piexif.dump({}))
-        gps_ifd = {
-            piexif.GPSIFD.GPSLatitudeRef: b'N' if latitude >= 0 else b'S',
-            piexif.GPSIFD.GPSLatitude: deg_to_dms_rational(abs(latitude)),
-            piexif.GPSIFD.GPSLongitudeRef: b'E' if longitude >= 0 else b'W',
-            piexif.GPSIFD.GPSLongitude: deg_to_dms_rational(abs(longitude)),
-        }
-        exif_dict['GPS'] = gps_ifd
-        exif_bytes = piexif.dump(exif_dict)
-        image.save("photo_gps.jpg", exif=exif_bytes)
-        st.success("Coordonnées GPS mises à jour et image sauvegardée sous 'photo_gps.jpg'.")
+        if image.format == "JPEG":
+            exif_dict = piexif.load(image.info["exif"]) if "exif" in image.info else piexif.load(piexif.dump({}))
+            gps_ifd = {
+                piexif.GPSIFD.GPSLatitudeRef: b'N' if latitude >= 0 else b'S',
+                piexif.GPSIFD.GPSLatitude: deg_to_dms_rational(abs(latitude)),
+                piexif.GPSIFD.GPSLongitudeRef: b'E' if longitude >= 0 else b'W',
+                piexif.GPSIFD.GPSLongitude: deg_to_dms_rational(abs(longitude)),
+            }
+            exif_dict['GPS'] = gps_ifd
+            exif_bytes = piexif.dump(exif_dict)
+            buffer_gps = BytesIO()
+            image.save(buffer_gps, format="JPEG", exif=exif_bytes)
+            buffer_gps.seek(0)
+            st.success("Coordonnées GPS mises à jour.")
 
-        # Ajout bouton téléchargement PNG
-        buffer_gps = BytesIO()
-        image.save(buffer_gps, format="PNG")
-        buffer_gps.seek(0)
-        st.download_button(
-            label="📥 Télécharger l'image avec GPS en PNG",
-            data=buffer_gps,
-            file_name="photo_gps.png",
-            mime="image/png"
-        )
+            st.download_button(
+                label="📥 Télécharger l'image avec coordonnées GPS (JPEG)",
+                data=buffer_gps,
+                file_name="photo_gps.jpg",
+                mime="image/jpeg"
+            )
+        else:
+            st.warning("Les coordonnées GPS ne peuvent pas être ajoutées à une image PNG.")
 
-    # --------- 3. AFFICHER LES COORDONNÉES GPS SUR UNE CARTE ---------
+    # ----- AFFICHER LA POSITION SUR UNE CARTE -----
     st.header("3. Afficher la position GPS de la photo sur une carte")
     gps_info = exif_data.get("GPSInfo")
     if gps_info:
@@ -167,11 +171,11 @@ if uploaded_file:
         except Exception:
             st.warning("Impossible de lire les coordonnées GPS de l'image.")
     else:
-        st.info("Aucune coordonnée GPS lue dans l'image. (Ajoutez-les ci-dessus si besoin)")
+        st.info("Aucune coordonnée GPS trouvée dans l'image.")
 
-    # --------- 4. AFFICHAGE DES POI (VOYAGES/RÊVES) ---------
+    # ----- CARTE DES VOYAGES -----
     st.header("4. Carte de vos voyages ou destinations de rêve")
-    st.write("Saisissez les lieux (nom, latitude, longitude) à afficher sur la carte. Ajoutez au moins deux points pour voir une ligne.")
+    st.write("Saisissez les lieux (nom, latitude, longitude) à afficher sur la carte.")
 
     default_poi = [
         {"nom": "Paris", "latitude": 48.8566, "longitude": 2.3522},
@@ -183,7 +187,6 @@ if uploaded_file:
     ]
 
     poi_df = pd.DataFrame(default_poi)
-
     poi_input = st.data_editor(poi_df, num_rows="dynamic", key="poi_editor")
 
     if len(poi_input) >= 2:
