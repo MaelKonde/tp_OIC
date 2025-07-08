@@ -89,8 +89,17 @@ if uploaded_file:
         exif_dict["0th"][piexif.ImageIFD.Copyright] = copyright.encode('utf-8')
         exif_dict["0th"][piexif.ImageIFD.ImageDescription] = description.encode('utf-8')
         exif_bytes = piexif.dump(exif_dict)
-        image.save("photo_modifiee.jpg", exif=exif_bytes)
-        st.success("Métadonnées EXIF modifiées et image sauvegardée sous 'photo_modifiee.jpg'.")
+        buffer = BytesIO()
+        image.save(buffer, format="JPEG", exif=exif_bytes)
+        buffer.seek(0)
+        st.success("Métadonnées EXIF modifiées.")
+
+        st.download_button(
+            label="📥 Télécharger l'image modifiée (JPEG)",
+            data=buffer,
+            file_name="photo_modifiee.jpg",
+            mime="image/jpeg"
+)
 
         # Ajout bouton téléchargement PNG
         buffer = BytesIO()
