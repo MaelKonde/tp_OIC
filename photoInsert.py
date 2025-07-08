@@ -157,11 +157,10 @@ if uploaded_file:
     else:
         st.info("Aucune coordonnée GPS lue dans l'image. (Ajoutez-les ci-dessus si besoin)")
 
-        # --------- 4. AFFICHAGE DES POI (VOYAGES/RÊVES) ---------
+    # --------- 4. AFFICHAGE DES POI (VOYAGES/RÊVES) ---------
     st.header("4. Carte de vos voyages ou destinations de rêve")
     st.write("Saisissez les lieux (nom, latitude, longitude) à afficher sur la carte. Ajoutez au moins deux points pour voir une ligne.")
 
-    # POI mis à jour avec Paris, Kinshasa, Luxembourg, Bruxelles, Karlsruhe, Dortmund
     default_poi = [
         {"nom": "Paris", "latitude": 48.8566, "longitude": 2.3522},
         {"nom": "Kinshasa", "latitude": -4.4419, "longitude": 15.2663},
@@ -173,7 +172,7 @@ if uploaded_file:
 
     poi_df = pd.DataFrame(default_poi)
 
-    poi_input = st.experimental_data_editor(poi_df, num_rows="dynamic", key="poi_editor")
+    poi_input = st.data_editor(poi_df, num_rows="dynamic", key="poi_editor")
 
     if len(poi_input) >= 2:
         m = folium.Map(location=[poi_input.iloc[0]["latitude"], poi_input.iloc[0]["longitude"]], zoom_start=2)
