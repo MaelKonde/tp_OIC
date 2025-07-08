@@ -72,7 +72,7 @@ def auto_zoom(lat):
 # --------- APPLICATION ---------
 
 st.set_page_config(page_title="EXIF GPS & POI", layout="wide")
-st.title("📸 anipulation des métadonnées EXIF et cartographie")
+st.title("📸 Manipulation des métadonnées EXIF et cartographie")
 
 uploaded = st.file_uploader("Chargez une photo JPEG", type=["jpg","jpeg"])
 if not uploaded:
@@ -101,7 +101,7 @@ else:
     st.write("Aucune coordonnée GPS trouvée.")
 
  # Formulaire édition EXIF (uniquement pour JPEG)
-    if uploaded_file.type in ["image/jpeg", "image/jpg"]:
+    if uploaded.type in ["image/jpeg", "image/jpg"]:
         with st.form("edit_exif"):
             st.write("Modifiez les métadonnées EXIF principales :")
             artist = st.text_input("Artiste / Auteur", value=exif_data.get("Artist", b"").decode(errors="ignore") if exif_data.get("Artist") else "")
