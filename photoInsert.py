@@ -11,7 +11,6 @@
 import streamlit as st
 from PIL import Image
 import piexif
-import pandas as pd
 import folium
 from streamlit_folium import st_folium
 import requests
@@ -24,7 +23,7 @@ def get_exif_data(img):
     if "exif" in img.info:
         exif_dict = piexif.load(img.info["exif"])
         for ifd in exif_dict:
-            if not isinstance(exif_dict[ifd], dict):  # Ignorer "thumbnail"
+            if not isinstance(exif_dict[ifd], dict):
                 continue
             for tag in exif_dict[ifd]:
                 try:
@@ -60,95 +59,45 @@ def get_location_ipapi():
         pass
     return None, None
 
-# --------- APPLICATION STREAMLIT ---------
+def save_image_with_exif(image, exif_dict):
+    exif_bytes = piexif.dump(exif_dict)
+    buffer = BytesIO()
+    image.save(buffer, format="JPEG", exif=exif_bytes)
+    buffer.seek(0)
+    return buffer
 
-st.set_page_config(page_title="TP EXIF & Cartographie", layout="wide")
-st.title("Manipulation des métadonnées EXIF et cartographie")
+# Zoom automatique simplifié par approximation (fonction basique)
+def auto_zoom(lat):
+    if abs(lat) > 50:
+        return 4
+    elif abs(lat) > 20:
+        return 6
+    else:
+        return 8
 
-st.header("1. Charger une photo et éditer les métadonnées EXIF")
-uploaded_file = st.file_uploader("Chargez une photo (JPEG ou PNG)", type=["jpg", "jpeg", "png"])
+# --------- STREAMLIT ---------
+
+st.set_page_config(page_title="EXIF GPS & Carte", layout="wide")
+st.title("Modifier et valider les coordonnées GPS EXIF")
+
+uploaded_file = st.file_uploader("Chargez une photo (JPEG uniquement)", type=["jpg", "jpeg"])
 
 if uploaded_file:
     image = Image.open(uploaded_file)
-    st.image(image, caption="Aperçu de la photo", use_column_width=True)
+    st.image(image, caption="Photo chargée", use_column_width=True)
 
+    # Coordonnées actuelles détectées via IPAPI
+    lat_current, lon_current = get_location_ipapi()
+    if lat_current and lon_current:
+        st.info(f"Position actuelle détectée : Latitude {lat_current:.6f}, Longitude {lon_current:.6f}")
+    else:
+        st.warning("Impossible de détecter la position actuelle automatiquement.")
+
+    # Extraction coordonnées GPS existantes dans l'image
     exif_data = get_exif_data(image)
-    if exif_data:
-        st.subheader("Métadonnées EXIF détectées")
-        st.json(exif_data)
-    else:
-        st.info("Aucune métadonnée EXIF trouvée dans l'image.")
+    gps_info = exif_data.get("GPSInfo", None)
 
-    # Formulaire édition EXIF (uniquement pour JPEG)
-    if uploaded_file.type in ["image/jpeg", "image/jpg"]:
-        with st.form("edit_exif"):
-            st.write("Modifiez les métadonnées EXIF principales :")
-            artist = st.text_input("Artiste / Auteur", value=exif_data.get("Artist", b"").decode(errors="ignore") if exif_data.get("Artist") else "")
-            copyright = st.text_input("Copyright", value=exif_data.get("Copyright", b"").decode(errors="ignore") if exif_data.get("Copyright") else "")
-            description = st.text_input("Description", value=exif_data.get("ImageDescription", b"").decode(errors="ignore") if exif_data.get("ImageDescription") else "")
-            submitted = st.form_submit_button("Enregistrer les modifications")
-
-        if submitted:
-            exif_dict = piexif.load(image.info["exif"]) if "exif" in image.info else {"0th":{}, "Exif":{}, "GPS":{}, "1st":{}, "thumbnail": None}
-            exif_dict["0th"][piexif.ImageIFD.Artist] = artist.encode('utf-8')
-            exif_dict["0th"][piexif.ImageIFD.Copyright] = copyright.encode('utf-8')
-            exif_dict["0th"][piexif.ImageIFD.ImageDescription] = description.encode('utf-8')
-            exif_bytes = piexif.dump(exif_dict)
-            buffer = BytesIO()
-            image.save(buffer, format="JPEG", exif=exif_bytes)
-            buffer.seek(0)
-            st.success("Métadonnées EXIF modifiées.")
-
-            st.download_button(
-                label="📥 Télécharger l'image modifiée (JPEG)",
-                data=buffer,
-                file_name="photo_modifiee.jpg",
-                mime="image/jpeg"
-            )
-    else:
-        st.info("L'édition des métadonnées EXIF est uniquement disponible pour les images JPEG.")
-
-    # --------- 2. Modifier les coordonnées GPS (JPEG uniquement) ---------
-    st.header("2. Modifier les coordonnées GPS de la photo")
-    lat, lon = get_location_ipapi()
-    if lat and lon:
-        st.info(f"Votre position actuelle détectée : Latitude {lat:.5f}, Longitude {lon:.5f}")
-    else:
-        st.warning("Impossible de détecter automatiquement votre position. Saisissez-la manuellement.")
-
-    with st.form("gps_form"):
-        latitude = st.number_input("Latitude", value=lat if lat else 0.0, format="%.6f")
-        longitude = st.number_input("Longitude", value=lon if lon else 0.0, format="%.6f")
-        gps_submitted = st.form_submit_button("Mettre à jour les coordonnées GPS")
-
-    if gps_submitted:
-        if uploaded_file.type in ["image/jpeg", "image/jpg"]:
-            exif_dict = piexif.load(image.info["exif"]) if "exif" in image.info else {"0th":{}, "Exif":{}, "GPS":{}, "1st":{}, "thumbnail": None}
-            gps_ifd = {
-                piexif.GPSIFD.GPSLatitudeRef: b'N' if latitude >= 0 else b'S',
-                piexif.GPSIFD.GPSLatitude: deg_to_dms_rational(abs(latitude)),
-                piexif.GPSIFD.GPSLongitudeRef: b'E' if longitude >= 0 else b'W',
-                piexif.GPSIFD.GPSLongitude: deg_to_dms_rational(abs(longitude)),
-            }
-            exif_dict['GPS'] = gps_ifd
-            exif_bytes = piexif.dump(exif_dict)
-            buffer_gps = BytesIO()
-            image.save(buffer_gps, format="JPEG", exif=exif_bytes)
-            buffer_gps.seek(0)
-            st.success("Coordonnées GPS mises à jour.")
-
-            st.download_button(
-                label="📥 Télécharger l'image avec GPS (JPEG)",
-                data=buffer_gps,
-                file_name="photo_gps.jpg",
-                mime="image/jpeg"
-            )
-        else:
-            st.warning("La modification des coordonnées GPS est uniquement disponible pour les images JPEG.")
-
-    # --------- 3. Afficher la position GPS sur une carte ---------
-    st.header("3. Afficher la position GPS de la photo sur une carte")
-    gps_info = exif_data.get("GPSInfo")
+    lat_img, lon_img = None, None
     if gps_info:
         try:
             lat_ref = gps_info[1].decode() if isinstance(gps_info[1], bytes) else gps_info[1]
@@ -157,36 +106,69 @@ if uploaded_file:
             lon_dms = gps_info[4]
             lat_img = dms_rational_to_deg(lat_dms, lat_ref)
             lon_img = dms_rational_to_deg(lon_dms, lon_ref)
-            st.map(pd.DataFrame({'lat': [lat_img], 'lon': [lon_img]}))
         except Exception:
-            st.warning("Impossible de lire les coordonnées GPS de l'image.")
+            pass
+
+    st.subheader("Coordonnées GPS actuelles dans l'image")
+    if lat_img and lon_img:
+        st.write(f"Latitude : {lat_img:.6f}, Longitude : {lon_img:.6f}")
     else:
-        st.info("Aucune coordonnée GPS trouvée dans l'image.")
+        st.write("Aucune coordonnée GPS trouvée dans l'image.")
 
-    # --------- 4. Affichage des POI (voyages/rêves) ---------
-    st.header("4. Carte de vos voyages ou destinations de rêve")
-    st.write("Saisissez les lieux (nom, latitude, longitude) à afficher sur la carte. Ajoutez au moins deux points pour voir une ligne.")
+    # Saisie manuelle des coordonnées GPS
+    st.subheader("Saisissez ou modifiez les coordonnées GPS")
 
-    default_poi = [
-        {"nom": "Paris", "latitude": 48.8566, "longitude": 2.3522},
-        {"nom": "Kinshasa", "latitude": -4.4419, "longitude": 15.2663},
-        {"nom": "Luxembourg", "latitude": 49.6117, "longitude": 6.1319},
-        {"nom": "Bruxelles", "latitude": 50.8503, "longitude": 4.3517},
-        {"nom": "Karlsruhe", "latitude": 49.0069, "longitude": 8.4037},
-        {"nom": "Dortmund", "latitude": 51.5136, "longitude": 7.4653},
-    ]
+    # Valeurs initiales (priorité : image > position actuelle > 0.0)
+    lat_default = lat_img if lat_img else (lat_current if lat_current else 0.0)
+    lon_default = lon_img if lon_img else (lon_current if lon_current else 0.0)
 
-    poi_df = pd.DataFrame(default_poi)
+    latitude = st.number_input("Latitude", value=lat_default, format="%.6f")
+    longitude = st.number_input("Longitude", value=lon_default, format="%.6f")
 
-    poi_input = st.data_editor(poi_df, num_rows="dynamic", key="poi_editor")
+    # Validation correspondance avec position actuelle
+    if lat_current and lon_current:
+        diff_lat = abs(latitude - lat_current)
+        diff_lon = abs(longitude - lon_current)
+        if diff_lat < 0.001 and diff_lon < 0.001:
+            st.success("✔️ Les coordonnées correspondent à votre position actuelle.")
+        else:
+            st.error("❌ Les coordonnées ne correspondent pas à votre position actuelle.")
+    else:
+        st.info("Position actuelle non disponible pour validation.")
 
-    if len(poi_input) >= 2:
-        m = folium.Map(location=[poi_input.iloc[0]["latitude"], poi_input.iloc[0]["longitude"]], zoom_start=2)
-        points = []
-        for idx, row in poi_input.iterrows():
-            folium.Marker([row["latitude"], row["longitude"]], popup=row["nom"]).add_to(m)
-            points.append((row["latitude"], row["longitude"]))
-        folium.PolyLine(points, color="blue", weight=2.5, opacity=1).add_to(m)
+    # Bouton mise à jour des coordonnées GPS dans l'image
+    if st.button("Mettre à jour les coordonnées GPS dans l'image"):
+        exif_dict = piexif.load(image.info["exif"]) if "exif" in image.info else {"0th":{}, "Exif":{}, "GPS":{}, "1st":{}, "thumbnail": None}
+        gps_ifd = {
+            piexif.GPSIFD.GPSLatitudeRef: b'N' if latitude >= 0 else b'S',
+            piexif.GPSIFD.GPSLatitude: deg_to_dms_rational(abs(latitude)),
+            piexif.GPSIFD.GPSLongitudeRef: b'E' if longitude >= 0 else b'W',
+            piexif.GPSIFD.GPSLongitude: deg_to_dms_rational(abs(longitude)),
+        }
+        exif_dict['GPS'] = gps_ifd
+        buffer = save_image_with_exif(image, exif_dict)
+        st.success("Coordonnées GPS mises à jour dans l'image.")
+        st.download_button(
+            label="📥 Télécharger l'image modifiée avec GPS",
+            data=buffer,
+            file_name="photo_gps_modifiee.jpg",
+            mime="image/jpeg"
+        )
+
+        # Affichage carte zoomée sur la position saisie
+        zoom = auto_zoom(latitude)
+        m = folium.Map(location=[latitude, longitude], zoom_start=zoom)
+        folium.Marker([latitude, longitude], popup="Position GPS saisie").add_to(m)
+        st.subheader("Carte centrée sur les coordonnées saisies")
         st_folium(m, width=700)
     else:
-        st.info("Ajoutez au moins deux destinations pour afficher la carte.")
+        # Si pas encore mis à jour, afficher carte avec coordonnées initiales si possible
+        if lat_img and lon_img:
+            zoom = auto_zoom(lat_img)
+            m = folium.Map(location=[lat_img, lon_img], zoom_start=zoom)
+            folium.Marker([lat_img, lon_img], popup="Position GPS dans l'image").add_to(m)
+            st.subheader("Carte centrée sur les coordonnées actuelles dans l'image")
+            st_folium(m, width=700)
+        else:
+            st.info("Chargez ou saisissez des coordonnées GPS pour afficher la carte.")
+
