@@ -16,139 +16,128 @@ from streamlit_folium import st_folium
 import io
 import pandas as pd
 import json
+from datetime import datetime
 
-# === Fonctions utilitaires ===
+# === fonctions utilitaires ===
 
 def deg_to_dms_rational(deg_float):
-    min_float = (deg_float - int(deg_float)) * 60
-    sec_float = (min_float - int(min_float)) * 60
-    return [
-        (int(deg_float), 1),
-        (int(min_float), 1),
-        (int(sec_float * 100), 100)
-    ]
+    m_float = (deg_float - int(deg_float)) * 60
+    s_float = (m_float - int(m_float)) * 60
+    return [(int(deg_float),1),(int(m_float),1),(int(s_float*100),100)]
 
 def dms_to_deg(value):
     d, m, s = value
     return d[0]/d[1] + m[0]/m[1]/60 + s[0]/s[1]/3600
 
-def extract_gps_data(exif_dict):
-    gps = exif_dict.get("GPS", {})
+def extract_gps_data(exif):
+    gps = exif.get("GPS", {})
     if gps:
         lat = dms_to_deg(gps.get(piexif.GPSIFD.GPSLatitude, [(0,1),(0,1),(0,1)]))
         lon = dms_to_deg(gps.get(piexif.GPSIFD.GPSLongitude, [(0,1),(0,1),(0,1)]))
-        lat_ref = gps.get(piexif.GPSIFD.GPSLatitudeRef, b"N").decode()
-        lon_ref = gps.get(piexif.GPSIFD.GPSLongitudeRef, b"E").decode()
-        if lat_ref == "S":
-            lat = -lat
-        if lon_ref == "W":
-            lon = -lon
+        ref_lat = gps.get(piexif.GPSIFD.GPSLatitudeRef, b"N").decode()
+        ref_lon = gps.get(piexif.GPSIFD.GPSLongitudeRef, b"E").decode()
+        if ref_lat == "S": lat = -lat
+        if ref_lon == "W": lon = -lon
         return lat, lon
     return None, None
 
-def save_image_with_exif(img, exif_dict):
-    exif_bytes = piexif.dump(exif_dict)
-    buffer = io.BytesIO()
-    img.save(buffer, format="JPEG", exif=exif_bytes)
-    buffer.seek(0)
-    return buffer
+def save_with_exif(img, exif_dict):
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", exif=piexif.dump(exif_dict))
+    buf.seek(0)
+    return buf
 
-def auto_zoom(lat):
-    if abs(lat) > 60:
-        return 4
-    elif abs(lat) > 30:
-        return 6
-    else:
-        return 10
+def zoom_for(lat):
+    return 4 if abs(lat)>60 else 6 if abs(lat)>30 else 10
 
-# === Titre ===
-st.title("🖼️ Modification des métadonnées GPS & EXIF d'une image")
+# === interface ===
 
-# === Image upload ===
-uploaded_file = st.file_uploader("📤 Importer une image JPEG", type=["jpg", "jpeg"])
-if uploaded_file:
-    img = Image.open(uploaded_file)
-    st.image(img, caption="Image importée", use_column_width=True)
+st.title("🖼️ EXIF & GPS avancé + POI")
 
-    exif_dict = piexif.load(img.info.get("exif", b"")) if "exif" in img.info else {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}, "thumbnail": None}
-    lat_img, lon_img = extract_gps_data(exif_dict)
+uploaded = st.file_uploader("📤 Importer une image JPEG", type=["jpg","jpeg"])
+if not uploaded:
+    st.stop()
 
-    st.subheader("📄 Métadonnées EXIF actuelles")
-    st.json(exif_dict)
+img = Image.open(uploaded)
+st.image(img, use_column_width=True)
 
-    if lat_img is not None and lon_img is not None:
-        st.success(f"✅ L’image contient des coordonnées GPS : Latitude={lat_img:.6f}, Longitude={lon_img:.6f}")
-    else:
-        st.warning("⚠️ L’image ne contient aucune coordonnées GPS.")
+# lecture EXIF existant
+exif = piexif.load(img.info.get("exif", b""), )
 
-    lat_current = 48.9601  # Meaux
-    lon_current = 2.8787
+lat_img, lon_img = extract_gps_data(exif)
 
-    st.subheader("📍 Modifier les coordonnées GPS")
-    lat_input = st.number_input("Nouvelle latitude", value=lat_img if lat_img is not None else lat_current, format="%.6f")
-    lon_input = st.number_input("Nouvelle longitude", value=lon_img if lon_img is not None else lon_current, format="%.6f")
+# affichage EXIF brut en JSON
+st.subheader("🔍 Métadonnées EXIF actuelles")
+st.json({k: {piexif.TAGS[k][tag]["name"]: str(val) for tag,val in v.items() if tag in piexif.TAGS[k]} for k,v in exif.items() if isinstance(v, dict)})
 
-    if st.button("💾 Enregistrer coordonnées et métadonnées"):
-        gps_ifd = {
-            piexif.GPSIFD.GPSLatitudeRef: b"N" if lat_input >= 0 else b"S",
-            piexif.GPSIFD.GPSLatitude: deg_to_dms_rational(abs(lat_input)),
-            piexif.GPSIFD.GPSLongitudeRef: b"E" if lon_input >= 0 else b"W",
-            piexif.GPSIFD.GPSLongitude: deg_to_dms_rational(abs(lon_input)),
-        }
-        exif_dict["GPS"] = gps_ifd
+# formulaire EXIF professionnel
+st.subheader("🛠️ Formulaire EXIF professionnel")
+make = st.text_input("Make", exif["0th"].get(piexif.ImageIFD.Make,b"").decode(errors="ignore"))
+model = st.text_input("Model", exif["0th"].get(piexif.ImageIFD.Model,b"").decode(errors="ignore"))
+artist = st.text_input("Artist", exif["0th"].get(piexif.ImageIFD.Artist,b"").decode(errors="ignore"))
+copyright = st.text_input("Copyright", exif["0th"].get(piexif.ImageIFD.Copyright,b"").decode(errors="ignore"))
+software = st.text_input("Software", exif["0th"].get(piexif.ImageIFD.Software,b"").decode(errors="ignore"))
+desc = st.text_input("Description", exif["0th"].get(piexif.ImageIFD.ImageDescription,b"").decode(errors="ignore"))
+dto = st.text_input("DateTimeOriginal", exif["Exif"].get(piexif.ExifIFD.DateTimeOriginal,b"").decode(errors="ignore"))
 
-        # === Formulaire EXIF professionnel ===
-        st.subheader("📝 Formulaire métadonnées EXIF (professionnel)")
-        make = st.text_input("Appareil (Make)", exif_dict["0th"].get(piexif.ImageIFD.Make, b"").decode(errors="ignore"))
-        model = st.text_input("Modèle (Model)", exif_dict["0th"].get(piexif.ImageIFD.Model, b"").decode(errors="ignore"))
-        artist = st.text_input("Auteur/Artiste", exif_dict["0th"].get(piexif.ImageIFD.Artist, b"").decode(errors="ignore"))
-        software = st.text_input("Logiciel utilisé", exif_dict["0th"].get(piexif.ImageIFD.Software, b"").decode(errors="ignore"))
+# boutons validant GPS & EXIF
+lat_input = st.number_input("📍 Nouvelle latitude", value=lat_img if lat_img is not None else 48.9601, format="%.6f")
+lon_input = st.number_input("📍 Nouvelle longitude", value=lon_img if lon_img is not None else 2.8787, format="%.6f")
 
-        exif_dict["0th"][piexif.ImageIFD.Make] = make.encode("utf-8")
-        exif_dict["0th"][piexif.ImageIFD.Model] = model.encode("utf-8")
-        exif_dict["0th"][piexif.ImageIFD.Artist] = artist.encode("utf-8")
-        exif_dict["0th"][piexif.ImageIFD.Software] = software.encode("utf-8")
+if st.button("💾 Enregistrer et télécharger l’image"):
+    # mise à jour EXIF
+    exif["0th"][piexif.ImageIFD.Make] = make.encode()
+    exif["0th"][piexif.ImageIFD.Model] = model.encode()
+    exif["0th"][piexif.ImageIFD.Artist] = artist.encode()
+    exif["0th"][piexif.ImageIFD.Copyright] = copyright.encode()
+    exif["0th"][piexif.ImageIFD.Software] = software.encode()
+    exif["0th"][piexif.ImageIFD.ImageDescription] = desc.encode()
+    exif["Exif"][piexif.ExifIFD.DateTimeOriginal] = dto.encode()
 
-        buffer = save_image_with_exif(img, exif_dict)
-        match = abs(lat_input - lat_current) < 0.001 and abs(lon_input - lon_current) < 0.001
+    # mise à jour GPS
+    gps_ifd = {
+        piexif.GPSIFD.GPSLatitudeRef: b"N" if lat_input>=0 else b"S",
+        piexif.GPSIFD.GPSLatitude: deg_to_dms_rational(abs(lat_input)),
+        piexif.GPSIFD.GPSLongitudeRef: b"E" if lon_input>=0 else b"W",
+        piexif.GPSIFD.GPSLongitude: deg_to_dms_rational(abs(lon_input)),
+    }
+    exif["GPS"] = gps_ifd
 
-        if match:
-            st.success("✅ Coordonnées saisies correspondent à votre position actuelle (Meaux).")
-        else:
-            st.warning("❌ Coordonnées saisies différentes de votre position actuelle.")
+    buf = save_with_exif(img, exif)
+    st.success("✅ Image prête au téléchargement.")
 
-        st.download_button("📥 Télécharger l’image modifiée", data=buffer, file_name="image_modifiee.jpg", mime="image/jpeg")
+    # validation coordonnées
+    match = (abs(lat_input-48.9601)<0.001 and abs(lon_input-2.8787)<0.001)
+    st.info("✅ Coordonnées valides." if match else "⚠️ Coordonnées différentes de la position actuelle.")
 
-    # === Carte ===
-    st.subheader("🗺️ Carte des coordonnées")
-    map_center = [lat_current, lon_current]
-    m = folium.Map(location=map_center, zoom_start=6)
-    folium.Marker([lat_current, lon_current], tooltip="Ma position actuelle (Meaux)", icon=folium.Icon(color="green")).add_to(m)
-    folium.Marker([lat_input, lon_input], tooltip="Coordonnées saisies", icon=folium.Icon(color="blue")).add_to(m)
+    # affichage des points sur carte
+    m = folium.Map(location=[48.9601,2.8787], zoom_start=8)
+    folium.Marker([48.9601,2.8787], popup="Position actuelle (Meaux)", icon=folium.Icon(color="green")).add_to(m)
+    folium.Marker([lat_input,lon_input], popup="Coordonnées enregistrées", icon=folium.Icon(color="blue")).add_to(m)
+    st.subheader("🗺️ Résultat GPS")
     st_folium(m, width=700)
 
-# === Section POI ===
-st.header("4. POI : voyages ou destinations de rêve")
-default_poi = [
-    {"nom": "Paris", "latitude": 48.8566, "longitude": 2.3522},
-    {"nom": "Kinshasa", "latitude": -4.4419, "longitude": 15.2663},
-    {"nom": "Luxembourg", "latitude": 49.6117, "longitude": 6.1319},
-    {"nom": "Bruxelles", "latitude": 50.8503, "longitude": 4.3517},
-    {"nom": "Karlsruhe", "latitude": 49.0069, "longitude": 8.4037},
-    {"nom": "Dortmund", "latitude": 51.5136, "longitude": 7.4653},
-]
+    # téléchargement
+    st.download_button("📥 Télécharger l’image modifiée", data=buf, file_name="image_modifiee.jpg", mime="image/jpeg")
 
-poi_df = pd.DataFrame(default_poi)
-poi_input = st.data_editor(poi_df, num_rows="dynamic", key="poi_editor")
-if len(poi_input) >= 2:
-    center = [poi_input.iloc[0]["latitude"], poi_input.iloc[0]["longitude"]]
-    voyage_map = folium.Map(location=center, zoom_start=3)
-    pts = []
-    for _, r in poi_input.iterrows():
-        folium.Marker([r.latitude, r.longitude], popup=r.nom).add_to(voyage_map)
-        pts.append((r.latitude, r.longitude))
-    folium.PolyLine(pts, color="blue").add_to(voyage_map)
+# section POI
+st.header("4. POI – Destinations de rêve")
+default = [{"nom":"Paris","latitude":48.8566,"longitude":2.3522},
+           {"nom":"Kinshasa","latitude":-4.4419,"longitude":15.2663},
+           {"nom":"Luxembourg","latitude":49.6117,"longitude":6.1319},
+           {"nom":"Bruxelles","latitude":50.8503,"longitude":4.3517},
+           {"nom":"Karlsruhe","latitude":49.0069,"longitude":8.4037},
+           {"nom":"Dortmund","latitude":51.5136,"longitude":7.4653}]
+poi_df = pd.DataFrame(default)
+poi_input = st.data_editor(poi_df, num_rows="dynamic", key="poi")
+if len(poi_input)>=2:
+    vm = folium.Map(location=[poi_input.iloc[0].latitude, poi_input.iloc[0].longitude], zoom_start=3)
+    pts=[]
+    for _,r in poi_input.iterrows():
+        folium.Marker([r.latitude,r.longitude], popup=r.nom).add_to(vm)
+        pts.append((r.latitude,r.longitude))
+    folium.PolyLine(pts, color="blue").add_to(vm)
     st.subheader("🗺️ Carte des POI")
-    st_folium(voyage_map, width=700)
+    st_folium(vm, width=700)
 else:
-    st.info("Ajoute au moins deux lieux 😊")
+    st.info("Ajoute au moins deux POI pour voir la carte 😊")
