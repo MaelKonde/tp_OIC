@@ -15,10 +15,9 @@ import folium
 from streamlit_folium import st_folium
 import io
 import pandas as pd
-import json
 from datetime import datetime
 
-# === fonctions utilitaires ===
+# === Fonctions utilitaires ===
 
 def deg_to_dms_rational(deg_float):
     m_float = (deg_float - int(deg_float)) * 60
@@ -50,7 +49,7 @@ def save_with_exif(img, exif_dict):
 def zoom_for(lat):
     return 4 if abs(lat)>60 else 6 if abs(lat)>30 else 10
 
-# === interface ===
+# === Interface ===
 
 st.title("🖼️ EXIF & GPS avancé + POI")
 
@@ -61,16 +60,15 @@ if not uploaded:
 img = Image.open(uploaded)
 st.image(img, use_column_width=True)
 
-# lecture EXIF existant
-exif = piexif.load(img.info.get("exif", b""), )
-
+# Lecture EXIF existant
+exif = piexif.load(img.info.get("exif", b""))
 lat_img, lon_img = extract_gps_data(exif)
 
-# affichage EXIF brut en JSON
+# Affichage EXIF brut en JSON
 st.subheader("🔍 Métadonnées EXIF actuelles")
 st.json({k: {piexif.TAGS[k][tag]["name"]: str(val) for tag,val in v.items() if tag in piexif.TAGS[k]} for k,v in exif.items() if isinstance(v, dict)})
 
-# formulaire EXIF professionnel
+# Formulaire EXIF professionnel (ajout d'options avancées)
 st.subheader("🛠️ Formulaire EXIF professionnel")
 make = st.text_input("Make", exif["0th"].get(piexif.ImageIFD.Make,b"").decode(errors="ignore"))
 model = st.text_input("Model", exif["0th"].get(piexif.ImageIFD.Model,b"").decode(errors="ignore"))
@@ -79,13 +77,27 @@ copyright = st.text_input("Copyright", exif["0th"].get(piexif.ImageIFD.Copyright
 software = st.text_input("Software", exif["0th"].get(piexif.ImageIFD.Software,b"").decode(errors="ignore"))
 desc = st.text_input("Description", exif["0th"].get(piexif.ImageIFD.ImageDescription,b"").decode(errors="ignore"))
 dto = st.text_input("DateTimeOriginal", exif["Exif"].get(piexif.ExifIFD.DateTimeOriginal,b"").decode(errors="ignore"))
+# Options professionnelles ajoutées :
+job_name = st.text_input("Job Name", exif["0th"].get(40091, b"").decode(errors="ignore"))  # Tag non standard, exemple
+client = st.text_input("Client", exif["0th"].get(40092, b"").decode(errors="ignore"))      # Tag non standard, exemple
+location = st.text_input("Lieu de prise de vue", exif["0th"].get(40093, b"").decode(errors="ignore")) # Tag non standard, exemple
+contact = st.text_input("Contact Photographe", exif["0th"].get(40094, b"").decode(errors="ignore"))   # Tag non standard, exemple
 
-# boutons validant GPS & EXIF
+# Saisie et validation coordonnées GPS (modifiable)
 lat_input = st.number_input("📍 Nouvelle latitude", value=lat_img if lat_img is not None else 48.9601, format="%.6f")
 lon_input = st.number_input("📍 Nouvelle longitude", value=lon_img if lon_img is not None else 2.8787, format="%.6f")
 
-if st.button("💾 Enregistrer et télécharger l’image"):
-    # mise à jour EXIF
+# Saisie de coordonnées GPS pour vérification
+st.markdown("**Validation de coordonnées GPS externes**")
+lat_check = st.number_input("Latitude à vérifier", value=lat_input, format="%.6f", key="lat_check")
+lon_check = st.number_input("Longitude à vérifier", value=lon_input, format="%.6f", key="lon_check")
+if st.button("Valider la correspondance avec l'image"):
+    match = (abs(lat_check - lat_img) < 0.0001 and abs(lon_check - lon_img) < 0.0001)
+    st.info("✅ Correspondance parfaite." if match else "❌ Les coordonnées ne correspondent pas à l'image.")
+
+# Bouton unique pour tout enregistrer et télécharger
+if st.button("💾 Enregistrer EXIF & GPS puis télécharger l’image"):
+    # Mise à jour EXIF
     exif["0th"][piexif.ImageIFD.Make] = make.encode()
     exif["0th"][piexif.ImageIFD.Model] = model.encode()
     exif["0th"][piexif.ImageIFD.Artist] = artist.encode()
@@ -93,8 +105,12 @@ if st.button("💾 Enregistrer et télécharger l’image"):
     exif["0th"][piexif.ImageIFD.Software] = software.encode()
     exif["0th"][piexif.ImageIFD.ImageDescription] = desc.encode()
     exif["Exif"][piexif.ExifIFD.DateTimeOriginal] = dto.encode()
-
-    # mise à jour GPS
+    # Champs professionnels (utilise des tags personnalisés ou IPTC/XMP dans une vraie appli)
+    exif["0th"][40091] = job_name.encode()
+    exif["0th"][40092] = client.encode()
+    exif["0th"][40093] = location.encode()
+    exif["0th"][40094] = contact.encode()
+    # Mise à jour GPS
     gps_ifd = {
         piexif.GPSIFD.GPSLatitudeRef: b"N" if lat_input>=0 else b"S",
         piexif.GPSIFD.GPSLatitude: deg_to_dms_rational(abs(lat_input)),
@@ -106,21 +122,17 @@ if st.button("💾 Enregistrer et télécharger l’image"):
     buf = save_with_exif(img, exif)
     st.success("✅ Image prête au téléchargement.")
 
-    # validation coordonnées
-    match = (abs(lat_input-48.9601)<0.001 and abs(lon_input-2.8787)<0.001)
-    st.info("✅ Coordonnées valides." if match else "⚠️ Coordonnées différentes de la position actuelle.")
-
-    # affichage des points sur carte
-    m = folium.Map(location=[48.9601,2.8787], zoom_start=8)
-    folium.Marker([48.9601,2.8787], popup="Position actuelle (Meaux)", icon=folium.Icon(color="green")).add_to(m)
-    folium.Marker([lat_input,lon_input], popup="Coordonnées enregistrées", icon=folium.Icon(color="blue")).add_to(m)
+    # Affichage carte avec coordonnées choisies et Meaux
+    m = folium.Map(location=[lat_input, lon_input], zoom_start=zoom_for(lat_input))
+    folium.Marker([lat_input, lon_input], popup="Coordonnées enregistrées", icon=folium.Icon(color="blue")).add_to(m)
+    folium.Marker([48.9601, 2.8787], popup="Position de Meaux", icon=folium.Icon(color="green")).add_to(m)
     st.subheader("🗺️ Résultat GPS")
     st_folium(m, width=700)
 
-    # téléchargement
+    # Téléchargement
     st.download_button("📥 Télécharger l’image modifiée", data=buf, file_name="image_modifiee.jpg", mime="image/jpeg")
 
-# section POI
+# Section POI
 st.header("4. POI – Destinations de rêve")
 default = [{"nom":"Paris","latitude":48.8566,"longitude":2.3522},
            {"nom":"Kinshasa","latitude":-4.4419,"longitude":15.2663},
