@@ -141,15 +141,19 @@ if uploaded_file:
         image.save("photo_gps.jpg", exif=exif_bytes)
         st.success("✅ Coordonnées GPS mises à jour et image sauvegardée sous 'photo_gps.jpg'.")
 
-    # --------- 3. AFFICHER SUR UNE CARTE ---------
 
-    st.header("3. 🗺️ Afficher la position GPS de l'image")
-    try:
-        exif_bytes = image.info.get("exif", None)
-        if exif_bytes:
-            exif_dict = piexif.load(exif_bytes)
-        else:
-            exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}, "thumbnail": None}
+   # --------- 3. AFFICHER SUR UNE CARTE ---------
+st.header("3. 🗺️ Afficher la position GPS de l'image")
+
+# Recharger l’image modifiée avec GPS si elle existe
+try:
+    image_with_gps = Image.open("photo_gps.jpg")
+    exif_bytes = image_with_gps.info.get("exif", None)
+    if exif_bytes:
+        exif_dict = piexif.load(exif_bytes)
+    else:
+        exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}, "thumbnail": None}
+
 
         gps_info = exif_dict.get("GPS", {})
         if gps_info:
