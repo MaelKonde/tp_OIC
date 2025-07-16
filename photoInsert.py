@@ -145,7 +145,6 @@ if uploaded_file:
    # --------- 3. AFFICHER SUR UNE CARTE ---------
 st.header("3. 🗺️ Afficher la position GPS de l'image")
 
-# Recharger l’image modifiée avec GPS si elle existe
 try:
     image_with_gps = Image.open("photo_gps.jpg")
     exif_bytes = image_with_gps.info.get("exif", None)
@@ -154,20 +153,24 @@ try:
     else:
         exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}, "thumbnail": None}
 
-
-        gps_info = exif_dict.get("GPS", {})
-        if gps_info:
-            lat_ref = gps_info.get(piexif.GPSIFD.GPSLatitudeRef, b'N').decode()
-            lat_dms = gps_info.get(piexif.GPSIFD.GPSLatitude)
-            lon_ref = gps_info.get(piexif.GPSIFD.GPSLongitudeRef, b'E').decode()
-            lon_dms = gps_info.get(piexif.GPSIFD.GPSLongitude)
-            lat_img = dms_rational_to_deg(lat_dms, lat_ref)
-            lon_img = dms_rational_to_deg(lon_dms, lon_ref)
-            st.map(pd.DataFrame({'lat': [lat_img], 'lon': [lon_img]}))
+    gps_ifd = exif_dict.get("GPS", {})
+    if gps_ifd:
+        lat_ref = gps_ifd.get(piexif.GPSIFD.GPSLatitudeRef, b'N').decode() if isinstance(gps_ifd.get(piexif.GPSIFD.GPSLatitudeRef), bytes) else gps_ifd.get(piexif.GPSIFD.GPSLatitudeRef, 'N')
+        lat = gps_ifd.get(piexif.GPSIFD.GPSLatitude)
+        lon_ref = gps_ifd.get(piexif.GPSIFD.GPSLongitudeRef, b'E').decode() if isinstance(gps_ifd.get(piexif.GPSIFD.GPSLongitudeRef), bytes) else gps_ifd.get(piexif.GPSIFD.GPSLongitudeRef, 'E')
+        lon = gps_ifd.get(piexif.GPSIFD.GPSLongitude)
+        if lat and lon:
+            lat_deg = dms_rational_to_deg(lat, lat_ref)
+            lon_deg = dms_rational_to_deg(lon, lon_ref)
+            st.map(pd.DataFrame({'lat': [lat_deg], 'lon': [lon_deg]}))
         else:
             st.info("🛈 Aucune coordonnée GPS enregistrée dans cette image.")
-    except Exception as e:
-        st.warning(f"❌ Erreur de lecture EXIF GPS : {e}")
+    else:
+        st.info("🛈 Aucune coordonnée GPS enregistrée dans cette image.")
+
+except Exception as e:
+    st.error(f"❌ Erreur de lecture EXIF GPS : {e}")
+
 
     # --------- 4. VOYAGES / DESTINATIONS DE RÊVE ---------
 
