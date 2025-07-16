@@ -1,13 +1,17 @@
-#======================================================================
-# Nom du fichier   : photoInsert.py
-# Rôle             : Insertion d’une photo et édition des métadonnées EXIF
-# Auteur           : Maël Khonde Mbumba | Numéro d’étudiant : 24000486
-# Date de création : 05/03/2025
-# Version          : 1.0
-# Licence          : Exercice dans le cadre du cours de OIC
-# Compilation.     : (Pas de compilation, interprété avec Python 3)
-# Usage            : Pour exécuter : photoInsert.py               
-# =====================================================================
+# ======================================================================
+# Fichier       : photoInsert.py
+# Description   : Application Streamlit pour insérer une photo, éditer 
+#                 ses métadonnées EXIF (auteur, copyright, description, 
+#                 GPS), visualiser la localisation sur une carte, et 
+#                 gérer une liste de voyages/destinations.
+# Auteur        : Maël Khonde Mbumba | Numéro d’étudiant : 24000486
+# Date création : 05/07/2025
+# Version       : 1.0
+# Licence       : Usage pédagogique (cours OIC)
+# Exécution     : Python 3 avec Streamlit
+# Usage         : `streamlit run photoInsert.py`
+# ======================================================================
+
 import streamlit as st
 from PIL import Image
 import piexif
@@ -20,7 +24,8 @@ import requests
 
 def get_exif_data(img):
     """
-    Récupère les métadonnées EXIF de l'image sous forme de dictionnaire.
+    Extrait les métadonnées EXIF d'une image PIL et les retourne sous forme de dictionnaire lisible.
+    Affiche un avertissement Streamlit en cas d’erreur sur la lecture du bloc EXIF.
     """
     exif_data = {}
     try:
@@ -39,7 +44,8 @@ def get_exif_data(img):
 
 def deg_to_dms_rational(deg_float):
     """
-    Convertit un float degré GPS en tuple DMS (degrés, minutes, secondes) pour EXIF.
+    Convertit une latitude/longitude en degrés décimaux (float)
+    vers le format DMS (degrés, minutes, secondes) attendu par l’EXIF (tuple de rationnels).
     """
     deg = int(deg_float)
     min_float = abs(deg_float - deg) * 60
@@ -49,7 +55,8 @@ def deg_to_dms_rational(deg_float):
 
 def dms_rational_to_deg(dms, ref):
     """
-    Convertit un tuple DMS EXIF en float degré décimal.
+    Convertit une coordonnée GPS EXIF (format DMS rationnel + référence N/S/E/O)
+    en degrés décimaux float.
     """
     deg = dms[0][0] / dms[0][1]
     min = dms[1][0] / dms[1][1]
@@ -61,7 +68,8 @@ def dms_rational_to_deg(dms, ref):
 
 def get_location_ipapi():
     """
-    Récupère la position approximative de l'utilisateur via son IP.
+    Récupère la latitude et longitude approximatives via l’API ipapi (géolocalisation IP).
+    Retourne (latitude, longitude) ou (None, None) en cas d’échec.
     """
     try:
         response = requests.get('https://ipapi.co/json/')
@@ -74,20 +82,25 @@ def get_location_ipapi():
 
 # --------- APPLICATION STREAMLIT ---------
 
+# Configure la page Streamlit
 st.set_page_config(page_title="TP EXIF & Cartographie", layout="wide")
 st.title("📷 Manipulation des métadonnées EXIF & cartographie")
 
+# 1. Chargement et édition des métadonnées EXIF
 st.header("1. Charger une photo et éditer les métadonnées EXIF")
 uploaded_file = st.file_uploader("📂 Chargez une image JPEG", type=["jpg", "jpeg"])
 
 if uploaded_file:
+    # Ouvre l’image et affiche un aperçu
     image = Image.open(uploaded_file)
     st.image(image, caption="Aperçu de la photo", use_container_width=True)
 
+    # Lit et affiche les métadonnées EXIF trouvées
     exif_data = get_exif_data(image)
     st.subheader("🔎 Métadonnées EXIF détectées")
     st.json(exif_data)
 
+    # Formulaire Streamlit pour éditer les champs EXIF principaux
     with st.form("edit_exif"):
         st.write("✏️ Modifiez les métadonnées EXIF principales :")
         artist = st.text_input("👤 Artiste / Auteur", value=exif_data.get("Artist", b"").decode(errors="ignore") if exif_data.get("Artist") else "")
@@ -96,6 +109,7 @@ if uploaded_file:
         submitted = st.form_submit_button("💾 Enregistrer les modifications")
 
     if submitted:
+        # Charge ou initialise un dict EXIF, met à jour les champs édités par l'utilisateur
         exif_bytes = image.info.get("exif", None)
         if exif_bytes:
             exif_dict = piexif.load(exif_bytes)
@@ -109,7 +123,7 @@ if uploaded_file:
         image.save("photo_modifiee.jpg", exif=exif_bytes_new)
         st.success("✅ Métadonnées modifiées et image sauvegardée sous 'photo_modifiee.jpg'.")
 
-    # --------- 2. MODIFIER LES DONNÉES GPS ---------
+    # --------- 2. Modification des données GPS ---------
 
     st.header("2. 🌍 Modifier les coordonnées GPS de la photo")
     lat, lon = get_location_ipapi()
@@ -124,6 +138,7 @@ if uploaded_file:
         gps_submitted = st.form_submit_button("📌 Mettre à jour les coordonnées GPS")
 
     if gps_submitted:
+        # Met à jour la section GPS du dict EXIF et sauvegarde la nouvelle image
         exif_bytes = image.info.get("exif", None)
         if exif_bytes:
             exif_dict = piexif.load(exif_bytes)
@@ -141,11 +156,11 @@ if uploaded_file:
         image.save("photo_gps.jpg", exif=exif_bytes)
         st.success("✅ Coordonnées GPS mises à jour et image sauvegardée sous 'photo_gps.jpg'.")
 
-
-   # --------- 3. AFFICHER SUR UNE CARTE ---------
+# --------- 3. AFFICHAGE SUR CARTE ---------
 st.header("3. 🗺️ Afficher la position GPS de l'image")
 
 try:
+    # Ouvre l’image sauvegardée avec GPS ; extrait les coordonnées et affiche la position sur une carte
     image_with_gps = Image.open("photo_gps.jpg")
     exif_bytes = image_with_gps.info.get("exif", None)
     if exif_bytes:
@@ -171,13 +186,12 @@ try:
 except Exception as e:
     st.error(f"❌ Erreur de lecture EXIF GPS : {e}")
 
-
-
-# --------- 4. VOYAGES / DESTINATIONS DE RÊVE ---------
+# --------- 4. GESTION DE LISTE DE DESTINATIONS ---------
 
 st.header("4. 🌟 Vos voyages ou destinations de rêve")
 st.write("Ajoutez des lieux (nom, latitude, longitude).")
 
+# Liste d’exemples de lieux, éditable par l'utilisateur
 default_poi = [
     {"nom": "Paris", "latitude": 48.8566, "longitude": 2.3522},
     {"nom": "Tokyo", "latitude": 35.6895, "longitude": 139.6917},
@@ -185,12 +199,14 @@ default_poi = [
 ]
 poi_df = pd.DataFrame(default_poi)
 
+# Tableur interactif Streamlit pour entrer/modifier la liste
 poi_input = st.data_editor(poi_df, num_rows="dynamic", key="poi_editor")
 
-# ⚠️ Supprimer les lignes avec données manquantes
+# Nettoie la liste des points (supprime les lignes incomplètes)
 poi_input_clean = poi_input.dropna(subset=["latitude", "longitude"])
 
 if len(poi_input_clean) >= 2:
+    # Affiche la liste sur une carte, trace un trajet entre les points
     m = folium.Map(location=[poi_input_clean.iloc[0]["latitude"], poi_input_clean.iloc[0]["longitude"]], zoom_start=2)
     points = []
     for idx, row in poi_input_clean.iterrows():
