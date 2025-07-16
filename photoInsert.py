@@ -187,13 +187,16 @@ poi_df = pd.DataFrame(default_poi)
 
 poi_input = st.data_editor(poi_df, num_rows="dynamic", key="poi_editor")
 
-if len(poi_input) >= 2:
-    m = folium.Map(location=[poi_input.iloc[0]["latitude"], poi_input.iloc[0]["longitude"]], zoom_start=2)
+# ⚠️ Supprimer les lignes avec données manquantes
+poi_input_clean = poi_input.dropna(subset=["latitude", "longitude"])
+
+if len(poi_input_clean) >= 2:
+    m = folium.Map(location=[poi_input_clean.iloc[0]["latitude"], poi_input_clean.iloc[0]["longitude"]], zoom_start=2)
     points = []
-    for idx, row in poi_input.iterrows():
+    for idx, row in poi_input_clean.iterrows():
         folium.Marker([row["latitude"], row["longitude"]], popup=row["nom"]).add_to(m)
         points.append((row["latitude"], row["longitude"]))
     folium.PolyLine(points, color="blue", weight=15, opacity=1).add_to(m)
     st_folium(m, width=700)
 else:
-    st.info("➕ Ajoutez au moins deux destinations pour visualiser la carte.")
+    st.info("➕ Ajoutez au moins deux destinations valides pour visualiser la carte.")
