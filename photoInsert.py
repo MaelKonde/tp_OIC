@@ -197,5 +197,3 @@ except Exception as e:
     else:
         st.info("➕ Ajoutez au moins deux destinations pour visualiser la carte.")
 
-else:
-    st.info("Veuillez charger une image JPEG pour commencer.")
