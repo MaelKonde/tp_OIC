@@ -172,7 +172,7 @@ except Exception as e:
     st.error(f"❌ Erreur de lecture EXIF GPS : {e}")
 
 
-    # --------- 4. VOYAGES / DESTINATIONS DE RÊVE ---------
+   # --------- 4. VOYAGES / DESTINATIONS DE RÊVE ---------
 
     st.header("4. 🌟 Vos voyages ou destinations de rêve")
     st.write("Ajoutez des lieux (nom, latitude, longitude).")
@@ -192,7 +192,10 @@ except Exception as e:
         for idx, row in poi_input.iterrows():
             folium.Marker([row["latitude"], row["longitude"]], popup=row["nom"]).add_to(m)
             points.append((row["latitude"], row["longitude"]))
-        folium.PolyLine(points, color="blue", weight=5, opacity=1).add_to(m)
+        folium.PolyLine(points, color="blue", weight=2.5, opacity=1).add_to(m)
         st_folium(m, width=700)
     else:
         st.info("➕ Ajoutez au moins deux destinations pour visualiser la carte.")
+
+else:
+    st.info("Veuillez charger une image JPEG pour commencer.")
