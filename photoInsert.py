@@ -172,28 +172,28 @@ except Exception as e:
     st.error(f"❌ Erreur de lecture EXIF GPS : {e}")
 
 
-   # --------- 4. VOYAGES / DESTINATIONS DE RÊVE ---------
 
-    st.header("4. 🌟 Vos voyages ou destinations de rêve")
-    st.write("Ajoutez des lieux (nom, latitude, longitude).")
+# --------- 4. VOYAGES / DESTINATIONS DE RÊVE ---------
 
-    default_poi = [
-        {"nom": "Paris", "latitude": 48.8566, "longitude": 2.3522},
-        {"nom": "Tokyo", "latitude": 35.6895, "longitude": 139.6917},
-        {"nom": "New York", "latitude": 40.7128, "longitude": -74.0060},
-    ]
-    poi_df = pd.DataFrame(default_poi)
+st.header("4. 🌟 Vos voyages ou destinations de rêve")
+st.write("Ajoutez des lieux (nom, latitude, longitude).")
 
-    poi_input = st.data_editor(poi_df, num_rows="dynamic", key="poi_editor")
+default_poi = [
+    {"nom": "Paris", "latitude": 48.8566, "longitude": 2.3522},
+    {"nom": "Tokyo", "latitude": 35.6895, "longitude": 139.6917},
+    {"nom": "New York", "latitude": 40.7128, "longitude": -74.0060},
+]
+poi_df = pd.DataFrame(default_poi)
 
-    if len(poi_input) >= 2:
-        m = folium.Map(location=[poi_input.iloc[0]["latitude"], poi_input.iloc[0]["longitude"]], zoom_start=2)
-        points = []
-        for idx, row in poi_input.iterrows():
-            folium.Marker([row["latitude"], row["longitude"]], popup=row["nom"]).add_to(m)
-            points.append((row["latitude"], row["longitude"]))
-        folium.PolyLine(points, color="blue", weight=2.5, opacity=1).add_to(m)
-        st_folium(m, width=700)
-    else:
-        st.info("➕ Ajoutez au moins deux destinations pour visualiser la carte.")
+poi_input = st.data_editor(poi_df, num_rows="dynamic", key="poi_editor")
 
+if len(poi_input) >= 2:
+    m = folium.Map(location=[poi_input.iloc[0]["latitude"], poi_input.iloc[0]["longitude"]], zoom_start=2)
+    points = []
+    for idx, row in poi_input.iterrows():
+        folium.Marker([row["latitude"], row["longitude"]], popup=row["nom"]).add_to(m)
+        points.append((row["latitude"], row["longitude"]))
+    folium.PolyLine(points, color="blue", weight=2.5, opacity=1).add_to(m)
+    st_folium(m, width=700)
+else:
+    st.info("➕ Ajoutez au moins deux destinations pour visualiser la carte.")
