@@ -24,19 +24,23 @@ def get_exif_data(img):
     """
     exif_data = {}
     try:
-        exif_dict = piexif.load(img.info.get("exif", b""))
-        for ifd in exif_dict:
-            for tag in exif_dict[ifd]:
-                try:
-                    tag_name = piexif.TAGS[ifd][tag]["name"]
-                    exif_data[tag_name] = exif_dict[ifd][tag]
-                except KeyError:
-                    continue
+        if "exif" in img.info:
+            exif_dict = piexif.load(img.info["exif"])
+            for ifd in exif_dict:
+                for tag in exif_dict[ifd]:
+                    try:
+                        tag_name = piexif.TAGS[ifd][tag]["name"]
+                        exif_data[tag_name] = exif_dict[ifd][tag]
+                    except KeyError:
+                        continue
     except Exception as e:
         st.warning(f"Erreur de lecture EXIF : {e}")
     return exif_data
 
 def deg_to_dms_rational(deg_float):
+    """
+    Convertit un float degré GPS en tuple DMS (degrés, minutes, secondes) pour EXIF.
+    """
     deg = int(deg_float)
     min_float = abs(deg_float - deg) * 60
     min = int(min_float)
@@ -44,6 +48,9 @@ def deg_to_dms_rational(deg_float):
     return ((deg, 1), (min, 1), (sec, 100))
 
 def dms_rational_to_deg(dms, ref):
+    """
+    Convertit un tuple DMS EXIF en float degré décimal.
+    """
     deg = dms[0][0] / dms[0][1]
     min = dms[1][0] / dms[1][1]
     sec = dms[2][0] / dms[2][1] / 100
@@ -53,6 +60,9 @@ def dms_rational_to_deg(dms, ref):
     return val
 
 def get_location_ipapi():
+    """
+    Récupère la position approximative de l'utilisateur via son IP.
+    """
     try:
         response = requests.get('https://ipapi.co/json/')
         if response.status_code == 200:
@@ -65,54 +75,59 @@ def get_location_ipapi():
 # --------- APPLICATION STREAMLIT ---------
 
 st.set_page_config(page_title="TP EXIF & Cartographie", layout="wide")
-st.title("📸 Manipulation des métadonnées EXIF et cartographie")
+st.title("📷 Manipulation des métadonnées EXIF & cartographie")
 
-st.header("1️⃣ Charger une photo et éditer les métadonnées EXIF")
-uploaded_file = st.file_uploader("Chargez une photo (JPEG uniquement)", type=["jpg", "jpeg"])
+st.header("1. Charger une photo et éditer les métadonnées EXIF")
+uploaded_file = st.file_uploader("📂 Chargez une image JPEG", type=["jpg", "jpeg"])
 
 if uploaded_file:
     image = Image.open(uploaded_file)
     st.image(image, caption="Aperçu de la photo", use_container_width=True)
 
-    # Lecture des métadonnées EXIF existantes
     exif_data = get_exif_data(image)
-    st.subheader("Métadonnées EXIF détectées")
+    st.subheader("🔎 Métadonnées EXIF détectées")
     st.json(exif_data)
 
-    # Formulaire de modification EXIF
     with st.form("edit_exif"):
-        st.write("Modifiez les métadonnées EXIF principales :")
-        artist = st.text_input("Artiste / Auteur", value=exif_data.get("Artist", b"").decode(errors="ignore") if exif_data.get("Artist") else "")
-        copyright = st.text_input("Copyright", value=exif_data.get("Copyright", b"").decode(errors="ignore") if exif_data.get("Copyright") else "")
-        description = st.text_input("Description", value=exif_data.get("ImageDescription", b"").decode(errors="ignore") if exif_data.get("ImageDescription") else "")
-        submitted = st.form_submit_button("💾 Enregistrer")
+        st.write("✏️ Modifiez les métadonnées EXIF principales :")
+        artist = st.text_input("👤 Artiste / Auteur", value=exif_data.get("Artist", b"").decode(errors="ignore") if exif_data.get("Artist") else "")
+        copyright = st.text_input("© Copyright", value=exif_data.get("Copyright", b"").decode(errors="ignore") if exif_data.get("Copyright") else "")
+        description = st.text_input("📝 Description", value=exif_data.get("ImageDescription", b"").decode(errors="ignore") if exif_data.get("ImageDescription") else "")
+        submitted = st.form_submit_button("💾 Enregistrer les modifications")
 
     if submitted:
-        exif_dict = piexif.load(image.info.get("exif", b""))
+        exif_bytes = image.info.get("exif", None)
+        if exif_bytes:
+            exif_dict = piexif.load(exif_bytes)
+        else:
+            exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}, "thumbnail": None}
+
         exif_dict["0th"][piexif.ImageIFD.Artist] = artist.encode('utf-8')
         exif_dict["0th"][piexif.ImageIFD.Copyright] = copyright.encode('utf-8')
         exif_dict["0th"][piexif.ImageIFD.ImageDescription] = description.encode('utf-8')
-        exif_bytes = piexif.dump(exif_dict)
-        image.save("photo_modifiee.jpg", exif=exif_bytes)
-        st.success("✅ Métadonnées EXIF modifiées et image enregistrée sous 'photo_modifiee.jpg'.")
+        exif_bytes_new = piexif.dump(exif_dict)
+        image.save("photo_modifiee.jpg", exif=exif_bytes_new)
+        st.success("✅ Métadonnées modifiées et image sauvegardée sous 'photo_modifiee.jpg'.")
 
     # --------- 2. MODIFIER LES DONNÉES GPS ---------
-    st.header("2️⃣ Modifier les coordonnées GPS de la photo")
+
+    st.header("2. 🌍 Modifier les coordonnées GPS de la photo")
     lat, lon = get_location_ipapi()
     if lat and lon:
-        st.info(f"🌍 Position approximative détectée : Latitude {lat:.5f}, Longitude {lon:.5f}")
+        st.info(f"📍 Votre position actuelle détectée : Latitude {lat:.5f}, Longitude {lon:.5f}")
     else:
-        st.warning("⚠️ Impossible de détecter automatiquement votre position.")
+        st.warning("❌ Position non détectée automatiquement. Saisissez-la manuellement.")
 
     with st.form("gps_form"):
         latitude = st.number_input("Latitude", value=lat if lat else 0.0, format="%.6f")
         longitude = st.number_input("Longitude", value=lon if lon else 0.0, format="%.6f")
-        gps_submitted = st.form_submit_button("📍 Mettre à jour GPS")
+        gps_submitted = st.form_submit_button("📌 Mettre à jour les coordonnées GPS")
 
     if gps_submitted:
-        try:
-            exif_dict = piexif.load(image.info.get("exif", b""))
-        except:
+        exif_bytes = image.info.get("exif", None)
+        if exif_bytes:
+            exif_dict = piexif.load(exif_bytes)
+        else:
             exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}, "thumbnail": None}
 
         gps_ifd = {
@@ -124,13 +139,18 @@ if uploaded_file:
         exif_dict['GPS'] = gps_ifd
         exif_bytes = piexif.dump(exif_dict)
         image.save("photo_gps.jpg", exif=exif_bytes)
-        st.success("✅ Coordonnées GPS mises à jour. Image enregistrée sous 'photo_gps.jpg'.")
+        st.success("✅ Coordonnées GPS mises à jour et image sauvegardée sous 'photo_gps.jpg'.")
 
-    # --------- 3. AFFICHER GPS SUR CARTE ---------
-    st.header("3️⃣ Affichage de la position GPS sur carte")
+    # --------- 3. AFFICHER SUR UNE CARTE ---------
 
+    st.header("3. 🗺️ Afficher la position GPS de l'image")
     try:
-        exif_dict = piexif.load(image.info.get("exif", b""))
+        exif_bytes = image.info.get("exif", None)
+        if exif_bytes:
+            exif_dict = piexif.load(exif_bytes)
+        else:
+            exif_dict = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}, "thumbnail": None}
+
         gps_info = exif_dict.get("GPS", {})
         if gps_info:
             lat_ref = gps_info.get(piexif.GPSIFD.GPSLatitudeRef, b'N').decode()
@@ -145,8 +165,9 @@ if uploaded_file:
     except Exception as e:
         st.warning(f"❌ Erreur de lecture EXIF GPS : {e}")
 
-    # --------- 4. DESTINATIONS / VOYAGES ---------
-    st.header("4️⃣ Vos voyages ou destinations de rêve")
+    # --------- 4. VOYAGES / DESTINATIONS DE RÊVE ---------
+
+    st.header("4. 🌟 Vos voyages ou destinations de rêve")
     st.write("Ajoutez des lieux (nom, latitude, longitude).")
 
     default_poi = [
@@ -167,7 +188,7 @@ if uploaded_file:
         folium.PolyLine(points, color="blue", weight=2.5, opacity=1).add_to(m)
         st_folium(m, width=700)
     else:
-        st.info("Ajoutez au moins deux lieux pour générer la carte.")
+        st.info("➕ Ajoutez au moins deux destinations pour visualiser la carte.")
 
 else:
-    st.info("📤 Veuillez charger une image JPEG pour commencer.")
+    st.info("Veuillez charger une image JPEG pour commencer.")
