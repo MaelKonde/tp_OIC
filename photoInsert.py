@@ -148,15 +148,16 @@ if uploaded_file:
 
     # --------- 4. POIs & FOLIUM ---------
     st.header("4️⃣ Vos voyages ou destinations de rêve")
-    st.write("Ajoutez des lieux (nom, latitude, longitude).")
+st.write("Ajoutez des lieux (nom, latitude, longitude).")
 
-    default_poi = [
-        {"nom": "Paris", "latitude": 48.8566, "longitude": 2.3522},
-        {"nom": "Tokyo", "latitude": 35.6895, "longitude": 139.6917},
-        {"nom": "New York", "latitude": 40.7128, "longitude": -74.0060},
-    ]
-    poi_df = pd.DataFrame(default_poi)
-    poi_input = st.experimental_data_editor(poi_df, num_rows="dynamic", key="poi_editor")
+default_poi = [
+    {"nom": "Paris", "latitude": 48.8566, "longitude": 2.3522},
+    {"nom": "Tokyo", "latitude": 35.6895, "longitude": 139.6917},
+    {"nom": "New York", "latitude": 40.7128, "longitude": -74.0060},
+]
+poi_df = pd.DataFrame(default_poi)
+poi_input = st.data_editor(poi_df, num_rows="dynamic", key="poi_editor")  # ✅ ligne corrigée
+
 
     if len(poi_input) >= 2:
         m = folium.Map(location=[poi_input.iloc[0]["latitude"], poi_input.iloc[0]["longitude"]], zoom_start=2)
