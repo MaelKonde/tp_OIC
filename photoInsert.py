@@ -146,29 +146,29 @@ if uploaded_file:
     except Exception as e:
         st.warning(f"Erreur de lecture EXIF GPS : {e}")
 
-    # --------- 4. POIs & FOLIUM ---------
-    st.header("4️⃣ Vos voyages ou destinations de rêve")
+  # --------- 4. AFFICHAGE DES POI (VOYAGES/RÊVES) ---------
+st.header("4️⃣ Vos voyages ou destinations de rêve")
 st.write("Ajoutez des lieux (nom, latitude, longitude).")
 
+# Exemple de POI par défaut
 default_poi = [
     {"nom": "Paris", "latitude": 48.8566, "longitude": 2.3522},
     {"nom": "Tokyo", "latitude": 35.6895, "longitude": 139.6917},
     {"nom": "New York", "latitude": 40.7128, "longitude": -74.0060},
 ]
 poi_df = pd.DataFrame(default_poi)
-poi_input = st.data_editor(poi_df, num_rows="dynamic", key="poi_editor")  # ✅ ligne corrigée
 
+# ✅ version stable de l'éditeur de données
+poi_input = st.data_editor(poi_df, num_rows="dynamic", key="poi_editor")
 
-    if len(poi_input) >= 2:
-        m = folium.Map(location=[poi_input.iloc[0]["latitude"], poi_input.iloc[0]["longitude"]], zoom_start=2)
-        points = []
-        for idx, row in poi_input.iterrows():
-            folium.Marker([row["latitude"], row["longitude"]], popup=row["nom"]).add_to(m)
-            points.append((row["latitude"], row["longitude"]))
-        folium.PolyLine(points, color="blue", weight=2.5).add_to(m)
-        st_folium(m, width=700)
-    else:
-        st.info("Ajoutez au moins deux destinations pour voir un itinéraire.")
-
+# Affichage de la carte avec POIs
+if len(poi_input) >= 2:
+    m = folium.Map(location=[poi_input.iloc[0]["latitude"], poi_input.iloc[0]["longitude"]], zoom_start=2)
+    points = []
+    for idx, row in poi_input.iterrows():
+        folium.Marker([row["latitude"], row["longitude"]], popup=row["nom"]).add_to(m)
+        points.append((row["latitude"], row["longitude"]))
+    folium.PolyLine(points, color="blue", weight=2.5, opacity=1).add_to(m)
+    st_folium(m, width=700)
 else:
-    st.info("🔼 Veuillez d'abord charger une image JPEG.")
+    st.info("Ajoutez au moins deux destinations pour afficher la carte.")
