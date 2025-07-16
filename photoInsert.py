@@ -193,7 +193,7 @@ if len(poi_input) >= 2:
     for idx, row in poi_input.iterrows():
         folium.Marker([row["latitude"], row["longitude"]], popup=row["nom"]).add_to(m)
         points.append((row["latitude"], row["longitude"]))
-    folium.PolyLine(points, color="blue", weight=5, opacity=1).add_to(m)
+    folium.PolyLine(points, color="blue", weight=15, opacity=1).add_to(m)
     st_folium(m, width=700)
 else:
     st.info("➕ Ajoutez au moins deux destinations pour visualiser la carte.")
